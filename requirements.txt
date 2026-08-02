@@ -1,0 +1,24 @@
+# ─── Parallax backend dependencies ────────────────────────────────────────────
+# Install: pip install -r requirements.txt
+# Tested with Python 3.10+
+
+# PDF parsing
+pypdf>=4.0,<5.0
+
+# Embedding (embedding-pipeline skill: all-mpnet-base-v2, 768 dims, L2-normalised)
+sentence-transformers>=2.6,<3.0
+torch>=2.0          # required by sentence-transformers; CPU-only build is fine for demo
+
+# Clustering (constrained-clustering skill: HDBSCAN primary, k-means fallback)
+hdbscan>=0.8.33
+scikit-learn>=1.4,<2.0
+
+# Numerics
+numpy>=1.26,<2.0
+
+# API layer
+fastapi>=0.111,<0.120
+uvicorn[standard]>=0.29,<0.40
+
+# Utilities
+python-multipart>=0.0.9   # FastAPI file upload support

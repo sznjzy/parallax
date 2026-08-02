@@ -1,0 +1,151 @@
+# Parallax — Persistent Semantic Research Canvas
+
+> **Status: Spike validation phase** — scaffolding and technical assumption
+> validation complete.  UI canvas build begins after both spikes are confirmed.
+
+## What is Parallax?
+
+Parallax is a final-year CSE project that lets researchers drop PDFs/notes onto
+an infinite visual canvas.  Each document is automatically embedded, similar
+documents are clustered together, and the result is rendered as a force-directed
+physics layout.  The key differentiator from tools like NotebookLM is
+**persistence**: when a user manually corrects the AI (drags a document to a
+different cluster), that correction is stored as a constraint and respected in
+all future re-clustering runs — the system never forgets it.
+
+---
+
+## Project Structure
+
+```
+parallax/
+├── backend/
+│   ├── ingestion/          PDF + text parsing
+│   ├── embeddings/         Embedding generation (all-mpnet-base-v2, 768-dim, L2-norm)
+│   ├── clustering/         HDBSCAN + constrained k-means, must_link/cannot_link
+│   ├── layout/             Force-directed incremental layout engine
+│   ├── api/                FastAPI application & routes
+│   │   └── main.py         → GET / (health check)
+│   └── tests/
+│       ├── spike_clustering.py   ← Spike A
+│       └── spike_layout.py       ← Spike B
+├── frontend/
+│   ├── canvas/             React canvas component (built after spike validation)
+│   ├── components/         Shared UI components
+│   └── src/main.jsx        Scaffold hello-world
+├── data/
+│   └── sample_docs/        DROP YOUR PDFS HERE
+├── requirements.txt        Python backend dependencies
+└── README.md
+```
+
+---
+
+## Quick Start
+
+### Backend
+
+```bash
+# 1. Create and activate a virtual environment (Python 3.10+)
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Start the API (hello-world health check)
+uvicorn backend.api.main:app --reload
+# → visit http://localhost:8000
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+# → visit http://localhost:5173
+# The page pings the FastAPI backend at /api/ and shows the response.
+```
+
+---
+
+## Spike Validation (run before building any UI)
+
+### Spike A — Clustering quality
+
+```bash
+# 1. Drop 10-15 research PDFs into  data/sample_docs/
+# 2. Run:
+python -m backend.tests.spike_clustering
+```
+
+Reads all PDFs, embeds them with `all-mpnet-base-v2`, clusters via HDBSCAN
+(k-means fallback for small corpora), and prints:
+
+- Per-cluster document lists with confidence scores
+- Full evaluation contract (silhouette score, num_clusters, constraint metrics)
+
+**Goal:** silhouette score > 0.25, clusters that match your intuition about the
+topics in your reading list.  Adjust `HDBSCAN_MIN_CLUSTER_SIZE` and
+`BOUNDARY_MARGIN` at the top of the script if results look off.
+
+---
+
+### Spike B — Layout stability
+
+```bash
+python -m backend.tests.spike_layout
+```
+
+Creates synthetic nodes, runs initial force-directed layout to convergence,
+anchors existing nodes, inserts 3 new nodes, runs incremental update, and
+prints:
+
+```json
+{
+  "avg_displacement_existing_nodes": ...,
+  "max_displacement_existing_nodes": ...,
+  "convergence_iterations": ...,
+  "convergence_time_ms": ...
+}
+```
+
+**Goal:** `avg_displacement_existing_nodes` should be very small (< 5 canvas
+units) — proving existing nodes don't jump when new documents are added.
+
+---
+
+## Skills
+
+Project-specific development conventions live in `.agent/skills/`:
+
+| Skill | Controls |
+|---|---|
+| `embedding-pipeline` | Model choice, chunking rules, L2-norm, output contract |
+| `constrained-clustering` | Algorithm, constraint representation, evaluation contract |
+| `incremental-layout` | Physics parameters, anchoring, stability metrics |
+
+**All code that touches embeddings, clustering, or layout must follow the
+corresponding skill's output/evaluation contracts exactly**, since frontend
+rendering, the synthesis feature, and the query-highlighting feature all depend
+on those shapes.
+
+---
+
+## Technical Evaluation Axes
+
+The project's evaluation centres on three claims:
+
+1. **Clustering quality** — embeddings + HDBSCAN meaningfully organise real
+   research documents (measured by silhouette score, validated in Spike A).
+2. **Layout stability** — adding new documents does not disrupt existing spatial
+   arrangement (measured by `avg_displacement_existing_nodes`, validated in
+   Spike B).
+3. **Constraint satisfaction** — stored user corrections are correctly respected
+   across re-clustering runs (measured by `constraint_satisfaction_rate` in the
+   clustering evaluation contract).
+
+Every clustering run and every incremental layout update logs these metrics —
+see the evaluation contracts in the skill files for the exact JSON shapes.
