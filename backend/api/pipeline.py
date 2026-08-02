@@ -16,16 +16,21 @@ from pathlib import Path
 # Fix path to allow importing backend modules
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from backend.tests.spike_clustering import (
+from backend.embeddings.pipeline import (
     extract_text_from_pdf,
     chunk_text,
     load_model,
-    generate_embeddings,
-    cluster_embeddings,
-    SAMPLE_DOCS_DIR
+    generate_embeddings
 )
 
-from backend.tests.spike_layout import (
+from backend.clustering.pipeline import (
+    cluster_embeddings,
+    assign_stable_cluster_ids
+)
+
+from backend.tests.spike_clustering import SAMPLE_DOCS_DIR
+
+from backend.layout.physics import (
     Node,
     simulate,
     MAX_ITERATIONS_INITIAL,
@@ -38,72 +43,7 @@ from backend.tests.spike_layout import (
 MARGIN = 0.05
 STATE_FILE = Path(__file__).parent / "cluster_mapping.json"
 
-def assign_stable_cluster_ids(docs, labels):
-    """
-    Assign stable UUIDs to clusters based on overlap with previous state.
-    """
-    # Build new clusters: label -> set(doc_ids)
-    new_clusters = {}
-    for i, doc in enumerate(docs):
-        lbl = labels[i]
-        if lbl == -1:
-            continue
-        if lbl not in new_clusters:
-            new_clusters[lbl] = set()
-        new_clusters[lbl].add(doc["id"])
 
-    # Load old state: uuid -> set(doc_ids)
-    old_state = {}
-    if STATE_FILE.exists():
-        try:
-            with open(STATE_FILE, "r") as f:
-                raw_state = json.load(f)
-                old_state = {k: set(v) for k, v in raw_state.items()}
-        except Exception:
-            pass
-            
-    label_to_uuid = {}
-    used_uuids = set()
-    
-    # Compute overlaps
-    overlaps = []
-    print("\n[DEBUG] Overlap scores for new clusters against existing clusters:")
-    for lbl, new_docs in new_clusters.items():
-        for old_uuid, old_docs in old_state.items():
-            intersection = len(new_docs & old_docs)
-            if intersection > 0:
-                overlap_pct = intersection / min(len(new_docs), len(old_docs))
-                print(f"  New label {lbl} vs Old {old_uuid}: overlap = {intersection} docs ({overlap_pct:.0%})")
-                if overlap_pct >= 0.5:
-                    overlaps.append((overlap_pct, intersection, lbl, old_uuid))
-                
-    # Sort by overlap pct descending, then raw count descending
-    overlaps.sort(reverse=True, key=lambda x: (x[0], x[1]))
-    
-    # Assign greedily
-    for overlap_pct, intersection, lbl, old_uuid in overlaps:
-        if lbl not in label_to_uuid and old_uuid not in used_uuids:
-            print(f"  -> Assigning Old {old_uuid} to New label {lbl} (overlap: {intersection} docs, {overlap_pct:.0%})")
-            label_to_uuid[lbl] = old_uuid
-            used_uuids.add(old_uuid)
-            
-    # Assign new UUIDs for remaining labels
-    for lbl in new_clusters.keys():
-        if lbl not in label_to_uuid:
-            new_uuid = f"cluster-{uuid.uuid4().hex[:8]}" # Short UUID for readability
-            print(f"  -> Minting NEW UUID {new_uuid} for New label {lbl} (no meaningful overlap)")
-            label_to_uuid[lbl] = new_uuid
-            used_uuids.add(new_uuid)
-            
-    # Save new state
-    new_state = {}
-    for lbl, new_docs in new_clusters.items():
-        new_state[label_to_uuid[lbl]] = list(new_docs)
-        
-    with open(STATE_FILE, "w") as f:
-        json.dump(new_state, f, indent=2)
-        
-    return label_to_uuid
 
 def map_to_nodes(docs, embeddings, labels, centers, existing_nodes=None):
     """
@@ -113,7 +53,7 @@ def map_to_nodes(docs, embeddings, labels, centers, existing_nodes=None):
     nodes = []
     existing_map = {n.doc_id: n for n in existing_nodes} if existing_nodes else {}
 
-    label_to_uuid = assign_stable_cluster_ids(docs, labels)
+    label_to_uuid = assign_stable_cluster_ids(docs, labels, STATE_FILE)
 
     cids = [cid for cid in centers.keys() if cid != -1]
     if len(cids) < 2:

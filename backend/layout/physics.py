@@ -1,0 +1,150 @@
+import math
+from dataclasses import dataclass
+from typing import Optional
+import numpy as np
+
+ATTRACTION_K = 2.0
+REPULSION_K = 20.0
+INTER_CLUSTER_REPULSION_MULTIPLIER = 3.0
+GRAVITY_K = 0.01
+DAMPING = 0.85
+DT = 0.1
+ENERGY_THRESHOLD = 0.01
+MAX_ITERATIONS = 200
+MAX_ITERATIONS_INITIAL = 2_000
+ANCHOR_VELOCITY_DAMPING = 0.05
+
+CANVAS_WIDTH = 400.0
+CANVAS_HEIGHT = 300.0
+BOUNDARY_MARGIN = 0.05
+
+CLUSTER_CENTRES: list[tuple[float, float]] = [
+    (100.0, 150.0),
+    (200.0,  75.0),
+    (300.0, 150.0),
+]
+CLUSTER_INIT_SPREAD = 20.0
+
+@dataclass
+class Node:
+    """Represents one document on the canvas."""
+    doc_id: str
+    cluster_id: str
+    x: float
+    y: float
+    velocity_x: float = 0.0
+    velocity_y: float = 0.0
+    is_anchored: bool = False
+    is_boundary_document: bool = False
+    secondary_cluster_id: Optional[str] = None
+    secondary_weight: float = 0.0
+
+    def to_output_contract(self) -> dict:
+        """incremental-layout SKILL.md Output Contract."""
+        return {
+            "doc_id": self.doc_id,
+            "x": self.x,
+            "y": self.y,
+            "velocity_x": self.velocity_x,
+            "velocity_y": self.velocity_y,
+            "is_anchored": self.is_anchored,
+        }
+
+def compute_cluster_centroids(nodes: list[Node]) -> dict[str, np.ndarray]:
+    """Compute the 2D centroid for each cluster from current node positions."""
+    sums: dict[str, list] = {}
+    counts: dict[str, int] = {}
+    for node in nodes:
+        sums.setdefault(node.cluster_id, [0.0, 0.0])
+        sums[node.cluster_id][0] += node.x
+        sums[node.cluster_id][1] += node.y
+        counts[node.cluster_id] = counts.get(node.cluster_id, 0) + 1
+    return {
+        cid: np.array([sums[cid][0] / counts[cid], sums[cid][1] / counts[cid]])
+        for cid in sums
+    }
+
+def simulate(
+    nodes: list[Node],
+    max_iters: int = MAX_ITERATIONS,
+    cluster_home_positions: dict[str, tuple[float, float]] | None = None
+) -> tuple[int, float]:
+    """
+    Run the force-directed simulation to convergence.
+    """
+    n = len(nodes)
+    final_energy = 0.0
+
+    for iteration in range(max_iters):
+        centroids = compute_cluster_centroids(nodes)
+
+        fx = np.zeros(n)
+        fy = np.zeros(n)
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                dx = nodes[i].x - nodes[j].x
+                dy = nodes[i].y - nodes[j].y
+                dist_sq = dx * dx + dy * dy + 1e-4
+                dist = math.sqrt(dist_sq)
+
+                same_cluster = (nodes[i].cluster_id == nodes[j].cluster_id)
+                k_rep = REPULSION_K if same_cluster else REPULSION_K * INTER_CLUSTER_REPULSION_MULTIPLIER
+
+                force = k_rep / dist_sq
+                fx[i] += force * dx / dist
+                fy[i] += force * dy / dist
+                fx[j] -= force * dx / dist
+                fy[j] -= force * dy / dist
+
+        cx_canvas = CANVAS_WIDTH / 2.0
+        cy_canvas = CANVAS_HEIGHT / 2.0
+        
+        for i, node in enumerate(nodes):
+            if cluster_home_positions is not None:
+                c_primary = cluster_home_positions[node.cluster_id]
+            else:
+                c_primary = centroids[node.cluster_id]
+                
+            dx_p = c_primary[0] - node.x
+            dy_p = c_primary[1] - node.y
+            primary_weight = 1.0 - node.secondary_weight if node.is_boundary_document else 1.0
+
+            fx[i] += ATTRACTION_K * dx_p * primary_weight
+            fy[i] += ATTRACTION_K * dy_p * primary_weight
+
+            if node.is_boundary_document and node.secondary_cluster_id:
+                if cluster_home_positions is not None:
+                    if node.secondary_cluster_id in cluster_home_positions:
+                        c_sec = cluster_home_positions[node.secondary_cluster_id]
+                        fx[i] += ATTRACTION_K * (c_sec[0] - node.x) * node.secondary_weight
+                        fy[i] += ATTRACTION_K * (c_sec[1] - node.y) * node.secondary_weight
+                else:
+                    if node.secondary_cluster_id in centroids:
+                        c_sec = centroids[node.secondary_cluster_id]
+                        fx[i] += ATTRACTION_K * (c_sec[0] - node.x) * node.secondary_weight
+                        fy[i] += ATTRACTION_K * (c_sec[1] - node.y) * node.secondary_weight
+
+            if not node.is_anchored:
+                fx[i] += GRAVITY_K * (cx_canvas - node.x)
+                fy[i] += GRAVITY_K * (cy_canvas - node.y)
+
+        total_energy = 0.0
+        for i, node in enumerate(nodes):
+            node.velocity_x = (node.velocity_x + fx[i] * DT) * DAMPING
+            node.velocity_y = (node.velocity_y + fy[i] * DT) * DAMPING
+
+            if node.is_anchored:
+                node.velocity_x *= ANCHOR_VELOCITY_DAMPING
+                node.velocity_y *= ANCHOR_VELOCITY_DAMPING
+
+            node.x += node.velocity_x * DT
+            node.y += node.velocity_y * DT
+            total_energy += node.velocity_x ** 2 + node.velocity_y ** 2
+
+        final_energy = total_energy
+
+        if total_energy < ENERGY_THRESHOLD:
+            return iteration + 1, final_energy
+
+    return max_iters, final_energy

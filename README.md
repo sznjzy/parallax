@@ -1,7 +1,8 @@
 # Parallax — Persistent Semantic Research Canvas
 
-> **Status: Spike validation phase** — scaffolding and technical assumption
-> validation complete.  UI canvas build begins after both spikes are confirmed.
+> **Status: Backend validation & integration complete** — Spikes A and B have been successfully 
+> validated and integrated into a stable end-to-end backend pipeline. See [PROGRESS.md](PROGRESS.md) for full technical details.
+> UI canvas build is next.
 
 ## What is Parallax?
 
@@ -20,15 +21,15 @@ all future re-clustering runs — the system never forgets it.
 ```
 parallax/
 ├── backend/
-│   ├── ingestion/          PDF + text parsing
-│   ├── embeddings/         Embedding generation (all-mpnet-base-v2, 768-dim, L2-norm)
-│   ├── clustering/         HDBSCAN + constrained k-means, must_link/cannot_link
-│   ├── layout/             Force-directed incremental layout engine
-│   ├── api/                FastAPI application & routes
-│   │   └── main.py         → GET / (health check)
+│   ├── embeddings/         PDF parsing, chunking, and embedding generation
+│   ├── clustering/         HDBSCAN clustering & stable UUID assignments
+│   ├── layout/             Force-directed incremental layout physics engine
+│   ├── api/                FastAPI application & integration pipeline
+│   │   ├── main.py         → GET / (health check)
+│   │   └── pipeline.py     → End-to-end integration pipeline
 │   └── tests/
-│       ├── spike_clustering.py   ← Spike A
-│       └── spike_layout.py       ← Spike B
+│       ├── spike_clustering.py   ← Spike A (Validation Wrapper)
+│       └── spike_layout.py       ← Spike B (Validation Wrapper)
 ├── frontend/
 │   ├── canvas/             React canvas component (built after spike validation)
 │   ├── components/         Shared UI components
