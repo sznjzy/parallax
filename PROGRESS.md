@@ -45,12 +45,15 @@ The backend pipeline consists of three core components:
 * No frontend/canvas rendering exists yet—everything validated so far is backend-only, tested via printed terminal output.
 * The LLM synthesis feature (cross-cluster comparison) and question-grounded highlighting feature have not been started.
 * The manual correction/constraint-storage feature (user drags a document, system remembers it) has not been started. This is a core differentiator from the original pitch and is still pending.
-* **Technical Debt:** The current implementation's clustering and layout logic still physically lives inside `backend/tests/spike_clustering.py` and `backend/tests/spike_layout.py`, which are reused directly by `pipeline.py`. It has not yet been refactored into the proper `backend/embeddings/` and `backend/clustering/` module structure that was originally scaffolded. This must happen before frontend work starts so the frontend integrates against a stable API/module boundary rather than importing from test files.
+* **Technical Debt (Resolved):** The module refactor was completed and regression-tested. The core logic now lives in `backend/embeddings/`, `backend/clustering/`, and `backend/layout/`.
 
 ## 5. File/Module Map
-* `backend/tests/spike_layout.py` — layout validation spike (standalone, synthetic data)
-* `backend/tests/spike_clustering.py` — clustering validation spike (real PDF data)
-* `backend/api/pipeline.py` — integration pipeline chaining both together on real data
+* `backend/embeddings/pipeline.py` — core embedding logic
+* `backend/clustering/pipeline.py` — core clustering logic
+* `backend/layout/physics.py` — core force-directed layout engine
+* `backend/tests/spike_layout.py` — layout validation thin wrapper (standalone, synthetic data)
+* `backend/tests/spike_clustering.py` — clustering validation thin wrapper (real PDF data)
+* `backend/api/pipeline.py` — integration pipeline entry point chaining everything together on real data
 * `backend/api/cluster_mapping.json` — persistent stable-ID state (gitignored)
 * `.agent/skills/` — the three skill files defining technical contracts for embeddings, clustering, and layout
 * `data/sample_docs/` — test corpus containing 21 real PDFs (`paper1.pdf` through `paper21.pdf`), covering Neural Networks, Distributed Systems, Networking/Security, and Compilers.
