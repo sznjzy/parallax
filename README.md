@@ -135,6 +135,53 @@ on those shapes.
 
 ---
 
+## API
+
+The FastAPI server exposes the backend pipeline over HTTP.
+
+```bash
+uvicorn backend.api.main:app --reload
+# Interactive docs: http://localhost:8000/docs
+```
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/` | Liveness probe -- returns `{"status": "ok"}` |
+| `GET`  | `/api/status` | Readiness check -- reports PDF count and whether the embedding model is importable |
+| `POST` | `/api/organize` | Runs the full pipeline on `data/sample_docs/` and returns canvas node positions |
+
+### `POST /api/organize` -- Response shape
+
+Each element is a node dict:
+
+```json
+{
+  "doc_id":               "doc-paper1.pdf",
+  "x":                    142.3,
+  "y":                    87.6,
+  "velocity_x":           0.000012,
+  "velocity_y":          -0.000003,
+  "is_anchored":          true,
+  "cluster_id":           "cluster-a1b2c3d4",
+  "is_boundary_document": false
+}
+```
+
+The first six fields are the **incremental-layout output contract**; `cluster_id`
+and `is_boundary_document` are from the **constrained-clustering output contract**
+so the frontend can colour-code clusters and distinguish boundary documents without
+a second request.
+
+**Quick test via curl:**
+```bash
+curl -X POST http://localhost:8000/api/organize | python -m json.tool | head -40
+```
+
+**Known v0.2 simplifications (deferred):** document set is fixed to `data/sample_docs/`
+(no file upload yet); pipeline runs synchronously so large corpora may time out.
+
+---
+
 ## Technical Evaluation Axes
 
 The project's evaluation centres on three claims:

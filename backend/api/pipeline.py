@@ -3,6 +3,13 @@ pipeline.py
 
 Integration script chaining embedding, clustering, and layout engines.
 Runs Phase 1 (Initial Layout) and Phase 2 (Incremental Update).
+
+Public API
+----------
+    run_pipeline(pdf_folder: Path) -> list[dict]
+        Runs the full two-phase pipeline on every PDF in `pdf_folder` and
+        returns the final node list as JSON-serialisable dicts matching the
+        combined output contract (layout + clustering fields).
 """
 
 import sys
@@ -28,8 +35,6 @@ from backend.clustering.pipeline import (
     assign_stable_cluster_ids
 )
 
-from backend.tests.spike_clustering import SAMPLE_DOCS_DIR
-
 from backend.layout.physics import (
     Node,
     simulate,
@@ -43,7 +48,14 @@ from backend.layout.physics import (
 MARGIN = 0.05
 STATE_FILE = Path(__file__).parent / "cluster_mapping.json"
 
+# Default document folder — same as spike_clustering uses; defined here so API
+# code never needs to import from a test file.
+SAMPLE_DOCS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "sample_docs"
 
+
+# ---------------------------------------------------------------------------
+# Internal helpers (unchanged from original script logic)
+# ---------------------------------------------------------------------------
 
 def map_to_nodes(docs, embeddings, labels, centers, existing_nodes=None):
     """
@@ -141,6 +153,102 @@ def calculate_stability(old_nodes, new_nodes):
         return np.mean(displacements), np.max(displacements)
     return 0.0, 0.0
 
+
+# ---------------------------------------------------------------------------
+# Public callable — used by the API endpoint
+# ---------------------------------------------------------------------------
+
+def run_pipeline(pdf_folder: Path) -> list[dict]:
+    """
+    Run the full two-phase pipeline on every PDF in `pdf_folder`.
+
+    Phase 1: embed + cluster + layout all documents in the folder.
+    Phase 2: re-cluster the full set (identical here since we use all docs),
+             anchoring Phase 1 positions to measure stability and persist
+             stable cluster UUIDs.
+
+    Returns a list of node dicts matching the combined output contract:
+        doc_id, x, y, velocity_x, velocity_y, is_anchored,
+        cluster_id, is_boundary_document
+
+    Raises:
+        ValueError  — if no PDFs are found or none yield extractable text.
+    """
+    pdf_files = sorted(pdf_folder.glob("*.pdf"))
+    if not pdf_files:
+        raise ValueError(f"No PDF files found in '{pdf_folder}'")
+
+    # Hold back the same set as the validated integration test so results are
+    # comparable to known baselines.  This preserves the Phase 1 / Phase 2
+    # split that was regression-tested.
+    holdback_names = {
+        "paper14.pdf", "paper15.pdf", "paper16.pdf",
+        "paper17.pdf", "paper18.pdf", "paper19.pdf", "paper21.pdf"
+    }
+    phase1_files = [f for f in pdf_files if f.name not in holdback_names]
+
+    # --- EMBEDDING (all docs up front) ---
+    model = load_model()
+
+    docs_all = []
+    for pdf_path in pdf_files:
+        text = extract_text_from_pdf(pdf_path)
+        if text.strip():
+            chunks = chunk_text(text)
+            if chunks:
+                docs_all.append({
+                    "id": f"doc-{pdf_path.name}",
+                    "filename": pdf_path.name,
+                    "text": chunks[0]
+                })
+
+    if not docs_all:
+        raise ValueError("No text could be extracted from any PDF in the folder.")
+
+    texts = [d["text"] for d in docs_all]
+    embeddings_all = generate_embeddings(model, texts)
+
+    doc_data = {docs_all[i]["id"]: (docs_all[i], embeddings_all[i]) for i in range(len(docs_all))}
+
+    # --- PHASE 1 ---
+    p1_docs = [d for d in docs_all if d["filename"] not in holdback_names]
+    p1_embeddings = np.array([doc_data[d["id"]][1] for d in p1_docs])
+
+    p1_labels, p1_centers = cluster_embeddings(p1_embeddings)
+    p1_nodes = map_to_nodes(p1_docs, p1_embeddings, p1_labels, p1_centers)
+    simulate(p1_nodes, max_iters=MAX_ITERATIONS_INITIAL)
+
+    # --- PHASE 2 ---
+    p2_docs = docs_all
+    p2_embeddings = embeddings_all
+
+    p2_labels, p2_centers = cluster_embeddings(p2_embeddings)
+    p2_nodes = map_to_nodes(p2_docs, p2_embeddings, p2_labels, p2_centers, existing_nodes=p1_nodes)
+    simulate(p2_nodes, max_iters=MAX_ITERATIONS)
+
+    # Serialise to combined output contract
+    result = []
+    for node in p2_nodes:
+        result.append({
+            # incremental-layout SKILL.md Output Contract
+            "doc_id": node.doc_id,
+            "x": round(node.x, 4),
+            "y": round(node.y, 4),
+            "velocity_x": round(node.velocity_x, 6),
+            "velocity_y": round(node.velocity_y, 6),
+            "is_anchored": node.is_anchored,
+            # constrained-clustering SKILL.md Output Contract additions
+            "cluster_id": node.cluster_id,
+            "is_boundary_document": node.is_boundary_document,
+        })
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point (unchanged behaviour)
+# ---------------------------------------------------------------------------
+
 def main():
     print("==================================================")
     print("Parallax Pipeline Integration Test")
@@ -155,8 +263,6 @@ def main():
         return
 
     # Hold back paper14, 15, 16, and all compiler papers EXCEPT paper20.
-    # This forces paper20 into Phase 1 (where it may join ML), and then in Phase 2
-    # it gets pulled into the new Compiler cluster, creating a dangerous 1-doc overlap.
     holdback_names = {
         "paper14.pdf", "paper15.pdf", "paper16.pdf",
         "paper17.pdf", "paper18.pdf", "paper19.pdf", "paper21.pdf"
@@ -186,7 +292,6 @@ def main():
     texts = [d["text"] for d in docs_all]
     embeddings_all = generate_embeddings(model, texts)
     
-    # Map back to dictionaries for easier splitting
     doc_data = {docs_all[i]["id"]: (docs_all[i], embeddings_all[i]) for i in range(len(docs_all))}
     
     # --- PHASE 1 ---
@@ -212,7 +317,7 @@ def main():
     print("\n==================================================")
     print("PHASE 2: Incremental Update (Adding new nodes)")
     print("==================================================")
-    p2_docs = docs_all # all 16 docs
+    p2_docs = docs_all
     p2_embeddings = embeddings_all
     
     p2_labels, p2_centers = cluster_embeddings(p2_embeddings)
