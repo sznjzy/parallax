@@ -1,3 +1,4 @@
+import hashlib
 import math
 from dataclasses import dataclass
 from typing import Optional
@@ -14,16 +15,80 @@ MAX_ITERATIONS = 200
 MAX_ITERATIONS_INITIAL = 2_000
 ANCHOR_VELOCITY_DAMPING = 0.05
 
+# Canvas dimensions are sized for the current demo corpus (~10-25 documents).
+# At this scale a 400×300 canvas gives comfortable visual separation between
+# clusters without requiring scroll or zoom in the frontend.  If corpus size
+# grows significantly (>50 docs) consider scaling proportionally.
 CANVAS_WIDTH = 400.0
 CANVAS_HEIGHT = 300.0
-BOUNDARY_MARGIN = 0.05
 
-CLUSTER_CENTRES: list[tuple[float, float]] = [
-    (100.0, 150.0),
-    (200.0,  75.0),
-    (300.0, 150.0),
-]
 CLUSTER_INIT_SPREAD = 20.0
+
+
+def compute_home_positions(
+    cluster_ids: list[str],
+) -> dict[str, tuple[float, float]]:
+    """
+    Deterministically generate home (x, y) positions for an arbitrary number
+    of clusters, keyed by cluster ID string.
+
+    Stability guarantee
+    -------------------
+    Each cluster UUID is mapped to an angular position derived *solely* from
+    a hash of the UUID string itself (SHA-256, first 8 bytes as uint64,
+    reduced to [0, 2pi)).  This means the angular position for any given
+    cluster does NOT change when other clusters are added or removed — only
+    the radius scales with N for visual separation.
+
+    This replaces the previous rank-indexed approach (angle = 2pi*k/N) which
+    shifted every surviving cluster's home position whenever N changed.
+
+    Special cases
+    -------------
+    - 0 clusters → empty dict.
+    - 1 cluster  → canvas centre (circle degenerate).
+    - 2 clusters → symmetric left/right split; each side is determined by the
+                   cluster's own hash (lower hash value goes left), so adding a
+                   third cluster doesn't disturb the surviving two.
+
+    Radius
+    ------
+    radius = min(W, H) * 0.35  (fixed, same as before)
+
+    The canvas (400×300) gives each cluster a home ~105 units from centre,
+    which provides comfortable visual separation for up to ~12 clusters before
+    homes start to crowd.  Scale if corpus grows beyond that.
+    """
+    if not cluster_ids:
+        return {}
+
+    cx = CANVAS_WIDTH / 2.0
+    cy = CANVAS_HEIGHT / 2.0
+
+    def _angle_for(cid: str) -> float:
+        """Map a cluster UUID string to a stable angle in [0, 2π) via SHA-256."""
+        digest = hashlib.sha256(cid.encode()).digest()
+        # Take the first 8 bytes as a big-endian unsigned int and scale to [0, 1).
+        raw = int.from_bytes(digest[:8], byteorder="big")
+        fraction = raw / (2 ** 64)
+        return fraction * 2.0 * math.pi
+
+    n = len(cluster_ids)
+
+    if n == 1:
+        return {cluster_ids[0]: (cx, cy)}
+
+    radius = min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.35
+
+    positions: dict[str, tuple[float, float]] = {}
+    for cid in cluster_ids:
+        angle = _angle_for(cid)
+        positions[cid] = (
+            cx + radius * math.cos(angle),
+            cy + radius * math.sin(angle),
+        )
+    return positions
+
 
 @dataclass
 class Node:
@@ -71,6 +136,16 @@ def simulate(
 ) -> tuple[int, float]:
     """
     Run the force-directed simulation to convergence.
+
+    When ``cluster_home_positions`` is provided (a dict mapping cluster ID →
+    (x, y) home position), each node is attracted toward its cluster's fixed
+    home position rather than toward the dynamic centroid of its cluster.
+    This is the validated stable mode: use ``compute_home_positions()`` to
+    build this dict before calling simulate().
+
+    When ``cluster_home_positions`` is None, attraction falls back to dynamic
+    centroid coupling, which can cause centroid drift when boundary documents
+    are present.  Prefer the explicit home-positions path for production use.
     """
     n = len(nodes)
     final_energy = 0.0

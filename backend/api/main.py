@@ -92,35 +92,49 @@ def pipeline_status():
 def organize():
     """
     Run the full embedding → clustering → layout pipeline on every PDF currently
-    in `data/sample_docs/` and return canvas-ready node positions.
+    in `data/sample_docs/` and return canvas-ready node positions plus
+    clustering evaluation metrics.
 
-    Response — JSON array of node objects:
+    Response — JSON object with three keys:
     ```json
-    [
-      {
-        "doc_id":               "doc-paper1.pdf",
-        "x":                    142.3,
-        "y":                    87.6,
-        "velocity_x":           0.000012,
-        "velocity_y":          -0.000003,
-        "is_anchored":          true,
-        "cluster_id":           "cluster-a1b2c3d4",
-        "is_boundary_document": false
+    {
+      "nodes": [
+        {
+          "doc_id":               "doc-paper1.pdf",
+          "x":                    142.3,
+          "y":                    87.6,
+          "velocity_x":           0.000012,
+          "velocity_y":          -0.000003,
+          "is_anchored":          false,
+          "cluster_id":           "cluster-a1b2c3d4",
+          "is_boundary_document": false
+        }
+      ],
+      "evaluation": {
+        "silhouette_score":           0.398,
+        "num_clusters":               3,
+        "constraint_satisfaction_rate": null,
+        "num_constraints_applied":    null,
+        "num_constraints_violated":   null
       },
-      ...
-    ]
+      "skipped_documents": [
+        {"filename": "bad.pdf", "reason": "PDF parse failed or empty"}
+      ]
+    }
     ```
 
-    **Deferred / known simplifications (v0.2):**
+    `nodes`: incremental-layout + constrained-clustering output contracts.
+    `evaluation`: clustering quality metrics for this run. `constraint_*` fields
+      are `null` until manual-correction / constraint-storage is implemented.
+    `skipped_documents`: PDFs that could not be parsed (empty = all succeeded).
+
+    **Deferred / known simplifications (v0.3):**
     - The document set is fixed to whatever is on disk in `data/sample_docs/`;
       file upload handling will be added when the frontend upload interaction
       is built.
     - Pipeline execution is synchronous and blocks the request thread.
       For large corpora (>50 docs) this will time out; async job handling
       is a future improvement.
-    - The Phase 1 / Phase 2 holdback split mirrors the validated integration
-      test. A future version will let callers supply their own document set
-      or phase split.
     """
     if not SAMPLE_DOCS_DIR.exists():
         raise HTTPException(
@@ -139,15 +153,13 @@ def organize():
 
     try:
         from backend.api.pipeline import run_pipeline
-        nodes = run_pipeline(SAMPLE_DOCS_DIR)
+        result = run_pipeline(SAMPLE_DOCS_DIR)
     except ValueError as exc:
-        # run_pipeline raises ValueError for empty/unparseable corpus
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        # Unexpected errors — surface them clearly rather than a silent 500
         raise HTTPException(
             status_code=500,
             detail=f"Pipeline error: {type(exc).__name__}: {exc}",
         )
 
-    return nodes
+    return result

@@ -26,7 +26,8 @@ from backend.clustering.pipeline import (
     ClusteringOutput,
     EvaluationContract,
     cluster_embeddings,
-    compute_boundary_flags
+    compute_boundary_flags,
+    compute_evaluation,
 )
 
 SAMPLE_DOCS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "sample_docs"
@@ -104,23 +105,16 @@ def main():
     labels, centers = cluster_embeddings(embeddings)
     is_boundary = compute_boundary_flags(embeddings, labels, centers)
     
-    # Calculate Silhouette Score
-    # Silhouette score requires at least 2 clusters (excluding noise)
-    valid_indices = [i for i, l in enumerate(labels) if l != -1]
-    unique_valid = set(labels[i] for i in valid_indices)
-    
-    if len(unique_valid) >= 2:
-        score = silhouette_score(embeddings[valid_indices], labels[valid_indices], metric='cosine')
-    else:
-        score = 0.0
-
-    eval_contract = EvaluationContract(
-        silhouette_score=float(score),
-        num_clusters=len(unique_valid),
-        constraint_satisfaction_rate=1.0, # No constraints yet
-        num_constraints_applied=0,
-        num_constraints_violated=0
-    )
+    # Compute evaluation contract using the canonical compute_evaluation()
+    eval_contract = compute_evaluation(embeddings, labels)
+    if eval_contract is None:
+        eval_contract = EvaluationContract(
+            silhouette_score=0.0,
+            num_clusters=0,
+            constraint_satisfaction_rate=None,
+            num_constraints_applied=None,
+            num_constraints_violated=None,
+        )
 
     # 4. Evaluation & Report
     print("\n4. EVALUATION & REPORT")

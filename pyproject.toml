@@ -1,0 +1,12 @@
+[project]
+name = "parallax"
+version = "0.3.0"
+description = "Persistent Semantic Research Canvas — backend"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
+
+[tool.setuptools]
+package-dir = {"" = "."}

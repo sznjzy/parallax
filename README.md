@@ -1,7 +1,7 @@
 # Parallax — Persistent Semantic Research Canvas
 
 > **Status: Backend validation & integration complete** — Spikes A and B have been successfully 
-> validated and integrated into a stable end-to-end backend pipeline. See [PROGRESS.md](PROGRESS.md) for full technical details.
+> validated, integrated into a stable end-to-end backend pipeline, and the live `/api/organize` endpoint has been stress-tested for real-world robustness. See [PROGRESS.md](PROGRESS.md) for full technical details.
 > UI canvas build is next.
 
 ## What is Parallax?
@@ -52,10 +52,11 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows
 # source .venv/bin/activate     # macOS / Linux
 
-# 2. Install dependencies
+# 2. Install the package in editable mode (required for backend.* imports)
+pip install -e .
 pip install -r requirements.txt
 
-# 3. Start the API (hello-world health check)
+# 3. Start the API
 uvicorn backend.api.main:app --reload
 # → visit http://localhost:8000
 ```
@@ -82,15 +83,15 @@ npm run dev
 python -m backend.tests.spike_clustering
 ```
 
-Reads all PDFs, embeds them with `all-mpnet-base-v2`, clusters via HDBSCAN
-(k-means fallback for small corpora), and prints:
+Reads all PDFs, embeds them with `all-mpnet-base-v2` (all chunks mean-pooled per document),
+clusters via HDBSCAN (k-means fallback for small corpora), and prints:
 
-- Per-cluster document lists with confidence scores
-- Full evaluation contract (silhouette score, num_clusters, constraint metrics)
+- Per-cluster document lists with boundary flags
+- Full evaluation contract (silhouette score, num_clusters; constraint fields are `null` until constraint-storage is implemented)
 
 **Goal:** silhouette score > 0.25, clusters that match your intuition about the
 topics in your reading list.  Adjust `HDBSCAN_MIN_CLUSTER_SIZE` and
-`BOUNDARY_MARGIN` at the top of the script if results look off.
+`BOUNDARY_MARGIN` (in `clustering/pipeline.py`) if results look off.
 
 ---
 
@@ -148,36 +149,49 @@ uvicorn backend.api.main:app --reload
 |--------|------|-------------|
 | `GET`  | `/` | Liveness probe -- returns `{"status": "ok"}` |
 | `GET`  | `/api/status` | Readiness check -- reports PDF count and whether the embedding model is importable |
-| `POST` | `/api/organize` | Runs the full pipeline on `data/sample_docs/` and returns canvas node positions |
+| `POST` | `/api/organize` | Runs the full pipeline on `data/sample_docs/` and returns canvas node positions + clustering metrics |
 
-### `POST /api/organize` -- Response shape
+### `POST /api/organize` -- Response shape (v0.3)
 
-Each element is a node dict:
+Returns a JSON **object** (not a bare array) with three keys:
 
 ```json
 {
-  "doc_id":               "doc-paper1.pdf",
-  "x":                    142.3,
-  "y":                    87.6,
-  "velocity_x":           0.000012,
-  "velocity_y":          -0.000003,
-  "is_anchored":          true,
-  "cluster_id":           "cluster-a1b2c3d4",
-  "is_boundary_document": false
+  "nodes": [
+    {
+      "doc_id":               "doc-paper1.pdf",
+      "x":                    142.3,
+      "y":                    87.6,
+      "velocity_x":           0.000012,
+      "velocity_y":          -0.000003,
+      "is_anchored":          false,
+      "cluster_id":           "cluster-a1b2c3d4",
+      "is_boundary_document": false
+    }
+  ],
+  "evaluation": {
+    "silhouette_score":            0.3175,
+    "num_clusters":                5,
+    "constraint_satisfaction_rate": null,
+    "num_constraints_applied":     null,
+    "num_constraints_violated":    null
+  },
+  "skipped_documents": [
+    {"filename": "bad.pdf", "reason": "PDF parse failed or empty"}
+  ]
 }
 ```
 
-The first six fields are the **incremental-layout output contract**; `cluster_id`
-and `is_boundary_document` are from the **constrained-clustering output contract**
-so the frontend can colour-code clusters and distinguish boundary documents without
-a second request.
+- **`nodes`**: Combined incremental-layout + constrained-clustering output contract. Each node has the six layout fields plus `cluster_id` and `is_boundary_document` so the frontend can colour-code clusters without a second request.
+- **`evaluation`**: Clustering quality metrics for this run. `constraint_*` fields are `null` until manual-correction / constraint-storage is implemented — they will not show a fake `1.0`.
+- **`skipped_documents`**: PDFs that could not be parsed. Empty list means all PDFs were processed successfully.
 
 **Quick test via curl:**
 ```bash
-curl -X POST http://localhost:8000/api/organize | python -m json.tool | head -40
+curl -X POST http://localhost:8000/api/organize | python -m json.tool | head -60
 ```
 
-**Known v0.2 simplifications (deferred):** document set is fixed to `data/sample_docs/`
+**Known v0.3 simplifications (deferred):** document set is fixed to `data/sample_docs/`
 (no file upload yet); pipeline runs synchronously so large corpora may time out.
 
 ---

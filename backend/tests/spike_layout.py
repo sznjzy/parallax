@@ -78,11 +78,10 @@ from backend.layout.physics import (
     ANCHOR_VELOCITY_DAMPING,
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
-    BOUNDARY_MARGIN,
-    CLUSTER_CENTRES,
     CLUSTER_INIT_SPREAD,
     Node,
     compute_cluster_centroids,
+    compute_home_positions,
     simulate
 )
 
@@ -95,20 +94,18 @@ def make_synthetic_nodes(
     n: int,
     cluster_id: str,
     rng: np.random.Generator,
-    centre_index: int,
+    home: tuple[float, float],
     is_anchored: bool = False,
 ) -> list[Node]:
     """
     Create n nodes for a single cluster, initialised as a Gaussian blob
-    around CLUSTER_CENTRES[centre_index].
+    around the given home (x, y) position.
 
-    Signature change from prior version: cluster_id is now a scalar (not a
-    list) and centre_index selects the CLUSTER_CENTRES entry directly.  The
-    old version accepted cluster_ids: list[str] with a cluster_index_offset
-    that collapsed to index 0 for single-cluster batches, causing all three
-    clusters to initialise at the same CLUSTER_CENTRES entry.
+    ``home`` is obtained from ``compute_home_positions()`` keyed by
+    cluster_id, so positions are deterministic and well-separated regardless
+    of cluster count.
     """
-    cx, cy = CLUSTER_CENTRES[centre_index % len(CLUSTER_CENTRES)]
+    cx, cy = home
     nodes = []
     for _ in range(n):
         node = Node(
@@ -173,16 +170,22 @@ def main() -> None:
     cluster_b = str(uuid.uuid4())
     cluster_c = str(uuid.uuid4())
 
-    # Each cluster's nodes are initialised near their designated CLUSTER_CENTRES
-    # entry.  centre_index is passed explicitly -- no ambiguous offset logic.
+    # Build fixed home positions for all three clusters using the canonical
+    # compute_home_positions() function.  This is the same call the production
+    # pipeline makes, so the spike exercises the exact same code path.
+    cluster_homes = compute_home_positions([cluster_a, cluster_b, cluster_c])
+
+    # Each cluster's nodes are initialised near their designated home position.
     initial_nodes: list[Node] = []
-    initial_nodes += make_synthetic_nodes(4, cluster_a, rng, centre_index=0)
-    initial_nodes += make_synthetic_nodes(3, cluster_b, rng, centre_index=1)
-    initial_nodes += make_synthetic_nodes(3, cluster_c, rng, centre_index=2)
+    initial_nodes += make_synthetic_nodes(4, cluster_a, rng, home=cluster_homes[cluster_a])
+    initial_nodes += make_synthetic_nodes(3, cluster_b, rng, home=cluster_homes[cluster_b])
+    initial_nodes += make_synthetic_nodes(3, cluster_c, rng, home=cluster_homes[cluster_c])
 
     # Boundary document: sits between clusters A and B (SKILL.md rule 3).
-    cx_boundary = (CLUSTER_CENTRES[0][0] + CLUSTER_CENTRES[1][0]) / 2
-    cy_boundary = (CLUSTER_CENTRES[0][1] + CLUSTER_CENTRES[1][1]) / 2
+    ha = cluster_homes[cluster_a]
+    hb = cluster_homes[cluster_b]
+    cx_boundary = (ha[0] + hb[0]) / 2
+    cy_boundary = (ha[1] + hb[1]) / 2
     boundary_node = Node(
         doc_id=str(uuid.uuid4()),
         cluster_id=cluster_a,
@@ -199,11 +202,6 @@ def main() -> None:
     print(f"  Running initial simulation...")
 
     t_start = time.perf_counter()
-    cluster_homes = {
-        cluster_a: CLUSTER_CENTRES[0],
-        cluster_b: CLUSTER_CENTRES[1],
-        cluster_c: CLUSTER_CENTRES[2],
-    }
     iters_initial, energy_initial = simulate(
         initial_nodes,
         max_iters=MAX_ITERATIONS_INITIAL,
@@ -227,8 +225,9 @@ def main() -> None:
     # Cluster centroids after Phase 1 (sanity check for separation).
     centroids_p1 = compute_cluster_centroids(initial_nodes)
     print(f"  Cluster centroids after Phase 1:")
-    for i, (cid, centroid) in enumerate(centroids_p1.items()):
-        label = ["A", "B", "C"][i] if i < 3 else str(i)
+    cid_labels = {cluster_a: "A", cluster_b: "B", cluster_c: "C"}
+    for cid, centroid in centroids_p1.items():
+        label = cid_labels.get(cid, cid[:8])
         print(f"    Cluster {label}: x={centroid[0]:.1f}  y={centroid[1]:.1f}")
         
     c_a, c_b, c_c = centroids_p1[cluster_a], centroids_p1[cluster_b], centroids_p1[cluster_c]
@@ -252,12 +251,12 @@ def main() -> None:
     for node in initial_nodes:
         node.is_anchored = True
 
-    # New nodes: one per cluster, each placed near its cluster's centre so they
+    # New nodes: one per cluster, each placed near its cluster's home so they
     # start close to their target equilibrium rather than from a random position.
     new_nodes: list[Node] = []
-    new_nodes += make_synthetic_nodes(1, cluster_a, rng, centre_index=0)
-    new_nodes += make_synthetic_nodes(1, cluster_b, rng, centre_index=1)
-    new_nodes += make_synthetic_nodes(1, cluster_c, rng, centre_index=2)
+    new_nodes += make_synthetic_nodes(1, cluster_a, rng, home=cluster_homes[cluster_a])
+    new_nodes += make_synthetic_nodes(1, cluster_b, rng, home=cluster_homes[cluster_b])
+    new_nodes += make_synthetic_nodes(1, cluster_c, rng, home=cluster_homes[cluster_c])
 
     all_nodes = initial_nodes + new_nodes
     print(f"  Total nodes: {len(all_nodes)}  "
