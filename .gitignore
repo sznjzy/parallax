@@ -3,9 +3,14 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+.venv_wsl/
+*.egg-info/
+.embedding_cache/
 
 # Node
 node_modules/
+frontend/dist/
+dist/
 
 # Editor/OS
 .vscode/

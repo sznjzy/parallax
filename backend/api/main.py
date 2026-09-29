@@ -9,13 +9,28 @@ Endpoints
 GET  /              — liveness probe
 GET  /api/status    — pipeline readiness check (documents found, model available)
 POST /api/organize  — run the full pipeline and return canvas node positions
+POST /api/analyze   — fast analysis endpoint: accepts uploaded PDFs, skips layout
+                       simulation, returns clustering metrics only (for demos)
 """
+import tempfile
+import shutil
 from pathlib import Path
+from dataclasses import asdict
+from typing import Any
 
-from fastapi import FastAPI, HTTPException
+import numpy as np
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from backend.api.pipeline import SAMPLE_DOCS_DIR
+from backend.embeddings.embedding_cache import is_cached, cache_stats
+from backend.clustering.constraints import (
+    load_constraints,
+    add_constraint,
+    remove_constraint,
+)
 
 app = FastAPI(
     title="Parallax API",
@@ -27,14 +42,142 @@ app = FastAPI(
     ),
 )
 
-# Allow the Vite dev server (localhost:5173) to hit the API during development.
+# Allow the Vite dev server and the standalone demo HTML (opened from disk)
+# to hit the API during development.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Module-level model cache — loaded once on first request, reused thereafter.
+# This avoids the 5-10s cold-start on every /api/analyze call.
+# ---------------------------------------------------------------------------
+
+_model_cache: Any = None
+
+
+def _get_model() -> Any:
+    """Return the cached embedding model, loading it on first call."""
+    global _model_cache
+    if _model_cache is None:
+        from backend.embeddings.pipeline import load_model
+        _model_cache = load_model()
+    return _model_cache
+
+
+# ---------------------------------------------------------------------------
+# Fast analysis helper — embedding + clustering only, NO layout simulation.
+# Used by /api/analyze so the demo response is fast.
+# ---------------------------------------------------------------------------
+
+def _run_analysis_only(pdf_folder: Path) -> dict:
+    """
+    Run embedding + clustering on every PDF in pdf_folder.
+    Skips the force-directed physics layout simulation entirely,
+    which is the main source of latency in run_pipeline().
+
+    Returns a dict:
+        {
+          "clusters":   list of {cluster_id, documents: [...], boundary_docs: [...]},
+          "evaluation": {silhouette_score, num_clusters, ...},
+          "skipped_documents": [...]
+        }
+    """
+    from backend.embeddings.pipeline import (
+        extract_text_from_pdf, chunk_text, embed_document_chunks, MODEL_NAME
+    )
+    from backend.clustering.pipeline import (
+        cluster_embeddings, assign_stable_cluster_ids,
+        compute_boundary_flags, compute_evaluation
+    )
+
+    model = _get_model()
+    pdf_files = sorted(pdf_folder.glob("*.pdf"))
+
+    docs_all: list[dict] = []
+    embeddings_list: list[np.ndarray] = []
+    skipped: list[dict] = []
+
+    for pdf_path in pdf_files:
+        text = extract_text_from_pdf(pdf_path)
+        if not text.strip():
+            skipped.append({"filename": pdf_path.name, "reason": "PDF parse failed or empty"})
+            continue
+        chunks = chunk_text(text)
+        if not chunks:
+            skipped.append({"filename": pdf_path.name, "reason": "No text chunks after chunking"})
+            continue
+
+        doc_id = f"doc-{pdf_path.name}"
+        canvas_vec, _ = embed_document_chunks(model, chunks)
+        docs_all.append({"id": doc_id, "filename": pdf_path.name})
+        embeddings_list.append(canvas_vec)
+
+    if not docs_all:
+        raise ValueError("No text could be extracted from any uploaded PDF.")
+
+    embeddings_all = np.array(embeddings_list)
+
+    # Cluster (fast)
+    labels, centers = cluster_embeddings(embeddings_all)
+    boundary_flags = compute_boundary_flags(embeddings_all, labels, centers)
+    label_to_uuid = assign_stable_cluster_ids(docs_all, labels, STATE_FILE)
+    evaluation = compute_evaluation(embeddings_all, labels)
+
+    # Build per-cluster groupings for the UI
+    cluster_groups: dict[str, dict] = {}
+    for i, doc in enumerate(docs_all):
+        label = labels[i]
+        if label == -1:
+            cid = "noise"
+        else:
+            cid = label_to_uuid[label]
+
+        is_boundary_flag = boundary_flags[i]
+        # boundary_flags returns tuples (is_boundary, sec_lbl, sec_weight) for
+        # non-noise docs, and False for noise docs.
+        if isinstance(is_boundary_flag, tuple):
+            is_boundary = bool(is_boundary_flag[0])
+        else:
+            is_boundary = False
+
+        if cid not in cluster_groups:
+            cluster_groups[cid] = {"cluster_id": cid, "documents": [], "boundary_documents": []}
+
+        entry = {"doc_id": doc["id"], "filename": doc["filename"]}
+        if is_boundary:
+            cluster_groups[cid]["boundary_documents"].append(entry)
+        else:
+            cluster_groups[cid]["documents"].append(entry)
+
+    eval_dict: dict | None = None
+    if evaluation is not None:
+        eval_dict = {
+            "silhouette_score": evaluation.silhouette_score,
+            "num_clusters": evaluation.num_clusters,
+            "constraint_satisfaction_rate": evaluation.constraint_satisfaction_rate,
+            "num_constraints_applied": evaluation.num_constraints_applied,
+            "num_constraints_violated": evaluation.num_constraints_violated,
+        }
+
+    return {
+        "clusters": list(cluster_groups.values()),
+        "evaluation": eval_dict,
+        "skipped_documents": skipped,
+        "total_documents_processed": len(docs_all),
+    }
+
+
+_ANALYZE_STATE_FILE = Path(__file__).parent / "cluster_mapping_analyze.json"
+
+# Reuse the same STATE_FILE path for analyze (keeps UUID lineage consistent)
+from backend.api.pipeline import SAMPLE_DOCS_DIR
+STATE_FILE = Path(__file__).parent / "cluster_mapping.json"
 
 
 # ---------------------------------------------------------------------------
@@ -42,9 +185,10 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 @app.get("/", tags=["health"])
+@app.get("/api/", tags=["health"])
 def health_check():
     """Quick liveness probe — returns OK so you can confirm the server started."""
-    return {"status": "ok", "project": "Parallax", "api_version": "0.2.0"}
+    return {"status": "ok", "project": "Parallax", "api_version": "0.3.0"}
 
 
 # ---------------------------------------------------------------------------
@@ -88,53 +232,28 @@ def pipeline_status():
 # POST /api/organize  — run the pipeline
 # ---------------------------------------------------------------------------
 
-@app.post("/api/organize", tags=["pipeline"])
-def organize():
+class OrganizeRequest(BaseModel):
     """
-    Run the full embedding → clustering → layout pipeline on every PDF currently
-    in `data/sample_docs/` and return canvas-ready node positions plus
-    clustering evaluation metrics.
+    Optional request body for POST /api/organize.
+    If `filenames` is provided (non-empty), only those PDFs are processed.
+    If omitted or empty, all PDFs in data/sample_docs/ are processed.
+    """
+    filenames: list[str] = []
 
-    Response — JSON object with three keys:
-    ```json
-    {
-      "nodes": [
-        {
-          "doc_id":               "doc-paper1.pdf",
-          "x":                    142.3,
-          "y":                    87.6,
-          "velocity_x":           0.000012,
-          "velocity_y":          -0.000003,
-          "is_anchored":          false,
-          "cluster_id":           "cluster-a1b2c3d4",
-          "is_boundary_document": false
-        }
-      ],
-      "evaluation": {
-        "silhouette_score":           0.398,
-        "num_clusters":               3,
-        "constraint_satisfaction_rate": null,
-        "num_constraints_applied":    null,
-        "num_constraints_violated":   null
-      },
-      "skipped_documents": [
-        {"filename": "bad.pdf", "reason": "PDF parse failed or empty"}
-      ]
-    }
-    ```
 
-    `nodes`: incremental-layout + constrained-clustering output contracts.
-    `evaluation`: clustering quality metrics for this run. `constraint_*` fields
-      are `null` until manual-correction / constraint-storage is implemented.
-    `skipped_documents`: PDFs that could not be parsed (empty = all succeeded).
+@app.post("/api/organize", tags=["pipeline"])
+def organize(body: OrganizeRequest = None):
+    """
+    Run the embedding → clustering → layout pipeline.
 
-    **Deferred / known simplifications (v0.3):**
-    - The document set is fixed to whatever is on disk in `data/sample_docs/`;
-      file upload handling will be added when the frontend upload interaction
-      is built.
-    - Pipeline execution is synchronous and blocks the request thread.
-      For large corpora (>50 docs) this will time out; async job handling
-      is a future improvement.
+    Accepts an optional JSON body::
+
+        { "filenames": ["paper1.pdf", "paper3.pdf"] }
+
+    If **filenames** is provided and non-empty, only those documents are
+    processed (cached embeddings are used where available, so previously
+    embedded docs are near-instant).  If omitted, all PDFs in
+    ``data/sample_docs/`` are processed.
     """
     if not SAMPLE_DOCS_DIR.exists():
         raise HTTPException(
@@ -151,9 +270,14 @@ def organize():
                    "Add at least one PDF before calling /api/organize.",
         )
 
+    # Build the doc_filter set from the request body
+    doc_filter: set[str] | None = None
+    if body and body.filenames:
+        doc_filter = set(body.filenames)
+
     try:
         from backend.api.pipeline import run_pipeline
-        result = run_pipeline(SAMPLE_DOCS_DIR)
+        result = run_pipeline(SAMPLE_DOCS_DIR, doc_filter=doc_filter)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -163,3 +287,247 @@ def organize():
         )
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# GET /api/documents  — list available PDFs with cache status
+# ---------------------------------------------------------------------------
+
+@app.get("/api/documents", tags=["pipeline"])
+def list_documents():
+    """
+    List all PDF files available in ``data/sample_docs/`` along with their
+    embedding cache status so the frontend can show which docs are
+    pre-computed and which need fresh embedding.
+
+    Response::
+
+        {
+          "documents": [
+            {
+              "filename": "paper1.pdf",
+              "size_bytes": 2215244,
+              "cached": true
+            },
+            ...
+          ],
+          "total": 21,
+          "cached": 15,
+          "uncached": 6
+        }
+    """
+    if not SAMPLE_DOCS_DIR.exists():
+        return {"documents": [], "total": 0, "cached": 0, "uncached": 0}
+
+    pdf_files = sorted(SAMPLE_DOCS_DIR.glob("*.pdf"))
+
+    docs = []
+    cached_count = 0
+    for p in pdf_files:
+        cached = is_cached(p)
+        if cached:
+            cached_count += 1
+        docs.append({
+            "filename": p.name,
+            "size_bytes": p.stat().st_size,
+            "cached": cached,
+        })
+
+    return {
+        "documents": docs,
+        "total": len(docs),
+        "cached": cached_count,
+        "uncached": len(docs) - cached_count,
+    }
+
+
+@app.get("/api/documents/{filename}/pdf", tags=["pipeline"])
+@app.get("/api/documents/{filename}/file", tags=["pipeline"])
+def get_document_pdf(filename: str):
+    """
+    Serve a PDF document directly by filename (e.g. 'paper1.pdf' or 'doc-paper1.pdf')
+    for in-browser viewing.
+    """
+    safe_name = filename.removeprefix("doc-")
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name = f"{safe_name}.pdf"
+
+    # Path traversal protection
+    clean_name = Path(safe_name).name
+    pdf_path = SAMPLE_DOCS_DIR / clean_name
+
+    if not pdf_path.exists() or not pdf_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=f"PDF '{clean_name}' not found in {SAMPLE_DOCS_DIR.name}.",
+        )
+
+    return FileResponse(
+        path=pdf_path,
+        media_type="application/pdf",
+        filename=clean_name,
+        headers={
+            "Content-Disposition": f'inline; filename="{clean_name}"',
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
+
+
+
+
+
+# ---------------------------------------------------------------------------
+# Constraint endpoints  (Track A — manual correction / persistent memory)
+# ---------------------------------------------------------------------------
+
+class ConstraintRequest(BaseModel):
+    doc_id: str
+    cluster_id: str
+
+
+@app.get("/api/constraints", tags=["constraints"])
+def list_constraints():
+    """
+    Return all currently active user constraints.
+
+    Response — JSON array:
+    ```json
+    [
+      {
+        "doc_id":            "doc-paper1.pdf",
+        "forced_cluster_id": "cluster-3a1b721f",
+        "created_at":        "2026-08-14T21:00:00+00:00",
+        "source":            "user"
+      }
+    ]
+    ```
+    """
+    constraints = load_constraints()
+    return [asdict(c) for c in constraints]
+
+
+@app.post("/api/constraints", tags=["constraints"], status_code=201)
+def create_constraint(body: ConstraintRequest):
+    """
+    Add or replace a user constraint.
+
+    If the document already has a constraint it is overwritten (idempotent
+    PUT semantics — the last manual drag wins).
+
+    Body:
+    ```json
+    { "doc_id": "doc-paper1.pdf", "cluster_id": "cluster-3a1b721f" }
+    ```
+
+    Response — the saved constraint object.
+    """
+    try:
+        constraint = add_constraint(body.doc_id, body.cluster_id)
+        return asdict(constraint)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save constraint: {exc}",
+        )
+
+
+@app.delete("/api/constraints/{doc_id}", tags=["constraints"], status_code=204)
+def delete_constraint(doc_id: str):
+    """
+    Remove the constraint for the given document.
+    Returns 204 No Content whether or not the constraint existed.
+    """
+    remove_constraint(doc_id)  # Returns False if not found — still 204.
+
+
+@app.delete("/api/constraints", tags=["constraints"], status_code=204)
+def delete_all_constraints():
+    """
+    Remove all active constraints atomically from disk.
+    """
+    from backend.clustering.constraints import clear_all_constraints
+    clear_all_constraints()
+
+
+# ---------------------------------------------------------------------------
+# POST /api/analyze  — fast demo endpoint (upload PDFs, get metrics back)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/analyze", tags=["demo"])
+async def analyze_uploaded_pdfs(files: list[UploadFile] = File(...)):
+    """
+    Fast demo endpoint for project review presentations.
+
+    Accepts 1–10 uploaded PDF files (multipart/form-data), runs the
+    embedding + clustering pipeline on them, and returns clustering metrics
+    and per-cluster document groupings.
+
+    **Key difference from /api/organize:** The force-directed physics layout
+    simulation is skipped entirely, making this endpoint significantly faster
+    while still demonstrating the core semantic clustering and evaluation.
+
+    The embedding model is cached in memory after the first call, so
+    subsequent requests are much faster.
+
+    Response shape:
+    ```json
+    {
+      "total_documents_processed": 7,
+      "clusters": [
+        {
+          "cluster_id": "cluster-a1b2c3d4",
+          "documents": [
+            {"doc_id": "doc-paper1.pdf", "filename": "paper1.pdf"}
+          ],
+          "boundary_documents": [
+            {"doc_id": "doc-paper3.pdf", "filename": "paper3.pdf"}
+          ]
+        }
+      ],
+      "evaluation": {
+        "silhouette_score": 0.3175,
+        "num_clusters": 3,
+        "constraint_satisfaction_rate": null,
+        "num_constraints_applied": null,
+        "num_constraints_violated": null
+      },
+      "skipped_documents": []
+    }
+    ```
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+    if len(files) > 15:
+        raise HTTPException(status_code=400, detail="Maximum 15 PDFs per request.")
+
+    # Validate that all uploads are PDFs
+    for f in files:
+        if not f.filename.lower().endswith(".pdf"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"File '{f.filename}' is not a PDF. Only PDF files are accepted.",
+            )
+
+    # Save uploads to a temp directory
+    tmp_dir = Path(tempfile.mkdtemp(prefix="parallax_analyze_"))
+    try:
+        for upload in files:
+            dest = tmp_dir / upload.filename
+            content = await upload.read()
+            dest.write_bytes(content)
+
+        result = _run_analysis_only(tmp_dir)
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis error: {type(exc).__name__}: {exc}",
+        )
+    finally:
+        # Always clean up the temp directory
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return result
+

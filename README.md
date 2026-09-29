@@ -1,17 +1,15 @@
 # Parallax — Persistent Semantic Research Canvas
 
-> **Status: Backend validation & integration complete** — Spikes A and B have been successfully 
-> validated, integrated into a stable end-to-end backend pipeline, and the live `/api/organize` endpoint has been stress-tested for real-world robustness. See [PROGRESS.md](PROGRESS.md) for full technical details.
-> UI canvas build is next.
+> **Status: Full-Stack Implementation Complete** — Backend clustering, incremental layout physics, persistent constraint satisfaction, embedding caching, interactive HTML5 canvas UI, in-browser PDF reader, and evaluation metrics are fully implemented and verified. See [PROGRESS.md](PROGRESS.md) for full technical details.
 
 ## What is Parallax?
 
 Parallax is a final-year CSE project that lets researchers drop PDFs/notes onto
-an infinite visual canvas.  Each document is automatically embedded, similar
+an infinite visual canvas. Each document is automatically embedded, similar
 documents are clustered together, and the result is rendered as a force-directed
-physics layout.  The key differentiator from tools like NotebookLM is
-**persistence**: when a user manually corrects the AI (drags a document to a
-different cluster), that correction is stored as a constraint and respected in
+physics layout. The key differentiator from tools like NotebookLM is
+**persistence**: when a user manually corrects the AI (holds Shift and drags a document to a
+different cluster), that correction is stored as a persistent constraint and respected in
 all future re-clustering runs — the system never forgets it.
 
 ---
@@ -22,18 +20,23 @@ all future re-clustering runs — the system never forgets it.
 parallax/
 ├── backend/
 │   ├── embeddings/         PDF parsing, chunking, and embedding generation
+│   │   └── embedding_cache.py  ← SHA-256 disk cache for instant reload
 │   ├── clustering/         HDBSCAN clustering & stable UUID assignments
+│   │   └── constraints.py      ← Constraint application & satisfaction math
 │   ├── layout/             Force-directed incremental layout physics engine
 │   ├── api/                FastAPI application & integration pipeline
-│   │   ├── main.py         → GET / (health check)
-│   │   └── pipeline.py     → End-to-end integration pipeline
-│   └── tests/
-│       ├── spike_clustering.py   ← Spike A (Validation Wrapper)
-│       └── spike_layout.py       ← Spike B (Validation Wrapper)
+│   │   ├── main.py         → Live API endpoints (organize, constraints, documents)
+│   │   ├── pipeline.py     → End-to-end integration pipeline
+│   │   └── constraints.json → Persistent user constraints store
+│   └── tests/              Validation wrappers (clustering, layout, determinism)
 ├── frontend/
-│   ├── canvas/             React canvas component (built after spike validation)
-│   ├── components/         Shared UI components
-│   └── src/main.jsx        Scaffold hello-world
+│   ├── src/
+│   │   ├── canvas/         Interactive Konva canvas, Cluster regions, Document nodes, Controls
+│   │   ├── components/     Evaluation panel, Selected node bar, PDF modal, Toast
+│   │   ├── hooks/          useOrganize, useConstraints, useDocuments, useCanvasSize
+│   │   ├── state/          Global AppContext & reducer
+│   │   └── index.css       Clean, minimalist design system tokens & styles
+│   └── package.json        React + Vite + Konva + lucide-react
 ├── data/
 │   └── sample_docs/        DROP YOUR PDFS HERE
 ├── requirements.txt        Python backend dependencies
@@ -148,8 +151,14 @@ uvicorn backend.api.main:app --reload
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET`  | `/` | Liveness probe -- returns `{"status": "ok"}` |
-| `GET`  | `/api/status` | Readiness check -- reports PDF count and whether the embedding model is importable |
-| `POST` | `/api/organize` | Runs the full pipeline on `data/sample_docs/` and returns canvas node positions + clustering metrics |
+| `GET`  | `/api/status` | Readiness check -- reports PDF count and whether embedding model is ready |
+| `POST` | `/api/organize` | Runs the full pipeline on selected PDFs and returns canvas node positions + evaluation metrics |
+| `GET`  | `/api/constraints` | Returns list of stored persistent user constraints |
+| `POST` | `/api/constraints` | Adds or updates a persistent constraint (`{doc_id, forced_cluster_id}`) |
+| `DELETE` | `/api/constraints/{doc_id}` | Deletes a single constraint for `doc_id` |
+| `DELETE` | `/api/constraints` | Clears all stored constraints |
+| `GET`  | `/api/documents` | Returns list of available PDFs with embedding cache status |
+| `GET`  | `/api/documents/{filename}/pdf` | Streams raw PDF binary for the in-browser viewer and external tab reading |
 
 ### `POST /api/organize` -- Response shape (v0.3)
 

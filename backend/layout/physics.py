@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Optional
 import numpy as np
 
-ATTRACTION_K = 2.0
-REPULSION_K = 20.0
+ATTRACTION_K = 0.5
+REPULSION_K = 4000.0
 INTER_CLUSTER_REPULSION_MULTIPLIER = 3.0
 GRAVITY_K = 0.01
 DAMPING = 0.85

@@ -1,0 +1,252 @@
+/**
+ * DocumentNode.jsx
+ *
+ * Single draggable document node on the Konva canvas.
+ *
+ * Visual states
+ * -------------
+ *   default      — filled circle, cluster colour
+ *   boundary     — dashed outer ring in same colour
+ *   noise/outlier— dashed grey border ring + outlier badge
+ *   anchored     — gold pin icon
+ *   constrained  — gold pin icon overlay
+ *   selected     — glow ring + boosted shadow
+ *   hover        — scale up + shadow bloom
+ *   dragging     — lifted shadow, cursor grabbing
+ *
+ * Props
+ * -----
+ *   node         Node       position + metadata from /api/organize
+ *   scale        number     logical→pixel scale factor
+ *   isSelected   boolean
+ *   isDimmed     boolean    true when another node is selected and this one is not a peer
+ *   isPinned     boolean    this doc has an active user constraint
+ *   onSelect     (doc_id) => void
+ *   onHover      (node, x, y) | null => void
+ *   onDragMove   (doc_id, logicalX, logicalY, isShiftKey) => void
+ *   onDragEnd    (doc_id, logicalX, logicalY, isShiftKey) => void
+ */
+import React, { useRef, useState, useEffect } from 'react'
+import { Group, Circle, Ring, Text, Rect } from 'react-konva'
+import Konva from 'konva'
+import { clusterColor } from './clusterColor'
+
+const BASE_RADIUS    = 12
+const BOUNDARY_OUTER = 17
+const HOVER_SCALE    = 1.15
+const DRAG_SCALE     = 1.25
+
+/** Truncate filename: "doc-paper1.pdf" → "paper1" */
+function shortLabel(doc_id) {
+  return doc_id
+    .replace(/^doc-/, '')
+    .replace(/\.pdf$/i, '')
+    .slice(0, 12)
+}
+
+export default function DocumentNode({
+  node,
+  scale,
+  isSelected,
+  isDimmed,
+  isPinned,
+  onSelect,
+  onOpenPdf,
+  onHover,
+  onDragMove,
+  onDragEnd,
+}) {
+  const [hovered, setHovered]   = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const groupRef = useRef(null)
+
+  const px = node.x * scale
+  const py = node.y * scale
+
+  const isNoise   = node.cluster_id.startsWith('noise-')
+  const color     = clusterColor(node.cluster_id)
+  const nodeColor = isNoise ? '#6e7681' : color
+
+  // Dynamic opacity
+  const opacity = isDimmed ? 0.22 : 1.0
+
+  // Shadow config
+  const shadowBlur  = dragging ? 28 : hovered ? 18 : isSelected ? 14 : 0
+  const shadowColor = nodeColor
+  const curScale    = dragging ? DRAG_SCALE : hovered ? HOVER_SCALE : 1.0
+
+  // Sync position with props via smooth tween if not actively dragging
+  useEffect(() => {
+    if (groupRef.current && !dragging) {
+      groupRef.current.to({
+        x: px,
+        y: py,
+        duration: 0.28,
+        easing: Konva.Easings.EaseOut,
+      })
+    }
+  }, [px, py, dragging])
+
+  return (
+    <Group
+      ref={groupRef}
+      x={px}
+      y={py}
+      opacity={opacity}
+      scaleX={curScale}
+      scaleY={curScale}
+      draggable
+      onMouseEnter={e => {
+        setHovered(true)
+        e.target.getStage().container().style.cursor = 'grab'
+        if (onHover) {
+          onHover(node, e.evt.clientX, e.evt.clientY)
+        }
+      }}
+      onMouseLeave={e => {
+        setHovered(false)
+        e.target.getStage().container().style.cursor = 'default'
+        if (onHover) onHover(null, 0, 0)
+      }}
+      onMouseMove={e => {
+        if (onHover && hovered) {
+          onHover(node, e.evt.clientX, e.evt.clientY)
+        }
+      }}
+      onClick={() => onSelect && onSelect(node.doc_id)}
+      onTap={() => onSelect && onSelect(node.doc_id)}
+      onDblClick={() => onOpenPdf && onOpenPdf(node.doc_id)}
+      onDblTap={() => onOpenPdf && onOpenPdf(node.doc_id)}
+      onDragStart={e => {
+        setDragging(true)
+        e.target.getStage().container().style.cursor = 'grabbing'
+        if (groupRef.current) groupRef.current.moveToTop()
+      }}
+      onDragMove={e => {
+        if (onDragMove) {
+          const logX = e.target.x() / scale
+          const logY = e.target.y() / scale
+          onDragMove(node.doc_id, logX, logY, e.evt?.shiftKey ?? false)
+        }
+      }}
+      onDragEnd={e => {
+        setDragging(false)
+        e.target.getStage().container().style.cursor = 'grab'
+        const logX = e.target.x() / scale
+        const logY = e.target.y() / scale
+        const isShiftKey = e.evt?.shiftKey ?? false
+
+        if (onDragEnd) {
+          onDragEnd(node.doc_id, logX, logY, isShiftKey, () => {
+            // Callback to snap back immediately if rejected or non-constraint drag
+            if (groupRef.current) {
+              groupRef.current.to({
+                x: px,
+                y: py,
+                duration: 0.25,
+                easing: Konva.Easings.EaseInOut,
+              })
+            }
+          })
+        }
+      }}
+    >
+      {/* Noise / Outlier ring */}
+      {isNoise && (
+        <Ring
+          innerRadius={BASE_RADIUS + 2}
+          outerRadius={BOUNDARY_OUTER + 1}
+          stroke="#8b949e"
+          strokeWidth={1}
+          dash={[3, 3]}
+          opacity={0.65}
+        />
+      )}
+
+      {/* Boundary ring — dashed outer circle */}
+      {node.is_boundary_document && !isNoise && (
+        <Ring
+          innerRadius={BASE_RADIUS + 2}
+          outerRadius={BOUNDARY_OUTER}
+          fill={nodeColor}
+          opacity={0.35}
+          dash={[4, 3]}
+        />
+      )}
+
+      {/* Main filled circle */}
+      <Circle
+        radius={BASE_RADIUS}
+        fill={nodeColor}
+        shadowColor={shadowColor}
+        shadowBlur={shadowBlur}
+        shadowOpacity={0.7}
+        shadowOffsetX={0}
+        shadowOffsetY={dragging ? 4 : 0}
+      />
+
+      {/* Selected ring */}
+      {isSelected && (
+        <Circle
+          radius={BASE_RADIUS + 4}
+          stroke={nodeColor}
+          strokeWidth={1.8}
+          fill="transparent"
+          opacity={0.9}
+        />
+      )}
+
+      {/* Anchored / pinned indicator */}
+      {isPinned && (
+        <Text
+          text="📌"
+          fontSize={10}
+          x={-5}
+          y={-BASE_RADIUS - 12}
+          listening={false}
+        />
+      )}
+
+      {/* Outlier pill for noise nodes */}
+      {isNoise && (
+        <Group y={BASE_RADIUS + 13}>
+          <Rect
+            x={-16}
+            y={0}
+            width={32}
+            height={11}
+            cornerRadius={3}
+            fill="rgba(110, 118, 129, 0.25)"
+            stroke="#6e7681"
+            strokeWidth={0.6}
+            listening={false}
+          />
+          <Text
+            text="outlier"
+            fontSize={7}
+            fill="#8b949e"
+            align="center"
+            width={32}
+            x={-16}
+            y={1.5}
+            listening={false}
+          />
+        </Group>
+      )}
+
+      {/* Label */}
+      <Text
+        text={shortLabel(node.doc_id)}
+        fontSize={8}
+        fontFamily="Inter, system-ui, sans-serif"
+        fill="#c9d1d9"
+        opacity={0.88}
+        align="center"
+        width={70}
+        x={-35}
+        y={BASE_RADIUS + 3}
+        listening={false}
+      />
+    </Group>
+  )
+}

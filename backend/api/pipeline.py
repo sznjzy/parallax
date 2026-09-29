@@ -44,6 +44,11 @@ from backend.embeddings.pipeline import (
     EmbeddingOutput,
     MODEL_NAME,
 )
+from backend.embeddings.embedding_cache import (
+    get_cached_embedding,
+    save_cached_embedding,
+    is_cached,
+)
 
 from backend.clustering.pipeline import (
     BOUNDARY_MARGIN,
@@ -53,6 +58,10 @@ from backend.clustering.pipeline import (
     compute_evaluation,
     ClusteringOutput,
     EvaluationContract,
+)
+from backend.clustering.constraints import (
+    apply_constraints,
+    evaluate_constraint_satisfaction,
 )
 
 from backend.layout.physics import (
@@ -86,6 +95,7 @@ def _map_to_nodes(
     label_to_uuid: dict,
     existing_nodes: list[Node] | None,
     rng: np.random.Generator,
+    forced_assignments: dict[str, str] | None = None,
 ) -> list[Node]:
     """
     Map clustering outputs to layout Node objects.
@@ -105,12 +115,16 @@ def _map_to_nodes(
         doc_id = doc["id"]
         label = labels[i]
         emb = embeddings[i]
-        is_boundary = boundary_flags[i]
 
         # --- Cluster ID and secondary cluster ---
-        if label == -1:
+        if forced_assignments and doc_id in forced_assignments:
+            cluster_id_str = forced_assignments[doc_id]
+            is_boundary = False
+            sec_cluster = None
+            sec_weight = 0.0
+        elif label == -1:
             cluster_id_str = f"noise-{doc_id}"
-            sec_cluster: str | None = None
+            sec_cluster = None
             sec_weight = 0.0
             is_boundary = False
         else:
@@ -118,9 +132,11 @@ def _map_to_nodes(
             is_boundary, sec_lbl, sec_weight = boundary_flags[i]
             sec_cluster = label_to_uuid.get(sec_lbl) if sec_lbl is not None else None
 
+        is_constrained = bool(forced_assignments and doc_id in forced_assignments)
+
         # --- Position ---
         if doc_id in existing_map:
-            # Incremental update: keep old positions, update cluster, set anchored.
+            # Incremental update: keep old positions, update cluster.
             old_node = existing_map[doc_id]
             node = Node(
                 doc_id=doc_id,
@@ -129,7 +145,7 @@ def _map_to_nodes(
                 y=old_node.y,
                 velocity_x=0.0,
                 velocity_y=0.0,
-                is_anchored=True,
+                is_anchored=is_constrained,
                 is_boundary_document=is_boundary,
                 secondary_cluster_id=sec_cluster,
                 secondary_weight=sec_weight,
@@ -141,7 +157,7 @@ def _map_to_nodes(
                 cluster_id=cluster_id_str,
                 x=CANVAS_WIDTH / 2.0 + float(rng.normal(0, CLUSTER_INIT_SPREAD)),
                 y=CANVAS_HEIGHT / 2.0 + float(rng.normal(0, CLUSTER_INIT_SPREAD)),
-                is_anchored=False,
+                is_anchored=is_constrained,
                 is_boundary_document=is_boundary,
                 secondary_cluster_id=sec_cluster,
                 secondary_weight=sec_weight,
@@ -172,6 +188,7 @@ def _run_phase(
     rng: np.random.Generator,
     existing_nodes: list[Node] | None,
     max_iters: int,
+    forced_assignments: dict[str, str] | None = None,
 ) -> tuple[list[Node], tuple[int, float], np.ndarray]:
     """
     Cluster + layout one phase. Returns (nodes_after_sim, (iters, energy), labels).
@@ -183,6 +200,7 @@ def _run_phase(
     nodes = _map_to_nodes(
         docs, embeddings, labels, centers, boundary_flags,
         label_to_uuid, existing_nodes, rng,
+        forced_assignments=forced_assignments,
     )
 
     # Wire compute_home_positions into simulate() — the validated stable mode.
@@ -206,7 +224,13 @@ def _ingest_corpus(
     pdf_files: list[Path], model: Any, is_live_api: bool = True
 ) -> tuple[list[dict], list[np.ndarray], list[dict], dict[str, list[np.ndarray]]]:
     """
-    Ingest PDFs into embedded chunks.
+    Ingest PDFs into embedded chunks, using the disk cache where possible.
+
+    Cache behaviour:
+        - If a .npy cache entry exists for this exact PDF (keyed by SHA-256),
+          the stored canvas vector is loaded directly — no model inference.
+        - Otherwise the document is embedded and the result is saved to cache.
+
     Shared by both run_pipeline() and main() stress test.
     """
     docs_all: list[dict] = []
@@ -214,7 +238,22 @@ def _ingest_corpus(
     per_chunk_store: dict[str, list[np.ndarray]] = {}
     skipped: list[dict] = []
 
+    cached_count = 0
+    embed_count = 0
+
     for pdf_path in pdf_files:
+        doc_id = f"doc-{pdf_path.name}"
+
+        # ── Try cache first ───────────────────────────────────────────
+        cached_vec = get_cached_embedding(pdf_path)
+        if cached_vec is not None:
+            docs_all.append({"id": doc_id, "filename": pdf_path.name})
+            embeddings_list.append(cached_vec)
+            cached_count += 1
+            logger.debug("Cache HIT  %s", pdf_path.name)
+            continue
+
+        # ── Cache miss — extract text and embed ───────────────────────
         text = extract_text_from_pdf(pdf_path)
         if not text.strip():
             skipped.append({"filename": pdf_path.name, "reason": "PDF parse failed or empty"})
@@ -226,8 +265,11 @@ def _ingest_corpus(
             skipped.append({"filename": pdf_path.name, "reason": "No text chunks after chunking"})
             continue
 
-        doc_id = f"doc-{pdf_path.name}"
         canvas_vec, chunk_vecs = embed_document_chunks(model, chunks)
+
+        # Persist to cache for next run
+        save_cached_embedding(pdf_path, canvas_vec)
+        embed_count += 1
 
         doc_dict = {"id": doc_id, "filename": pdf_path.name}
         if is_live_api:
@@ -245,16 +287,30 @@ def _ingest_corpus(
         embeddings_list.append(canvas_vec)
         logger.debug("Embedded %s (%d chunks)", pdf_path.name, len(chunks))
 
+    logger.info(
+        "Ingestion complete: %d cached, %d newly embedded, %d skipped",
+        cached_count, embed_count, len(skipped),
+    )
     return docs_all, embeddings_list, skipped, per_chunk_store
 
 
-def run_pipeline(pdf_folder: Path, seed: int = 42) -> dict:
+def run_pipeline(
+    pdf_folder: Path,
+    seed: int = 42,
+    doc_filter: set[str] | None = None,
+) -> dict:
     """
-    Run the full single-pass pipeline on every PDF in ``pdf_folder``.
+    Run the full single-pass pipeline on PDFs in ``pdf_folder``.
 
-    Does a straightforward single clustering pass over all PDFs present —
-    no hardcoded holdback split.  Dropping different PDFs into the folder
-    behaves exactly as a caller would expect.
+    Parameters
+    ----------
+    pdf_folder : Path
+        Folder containing .pdf files.
+    seed : int
+        RNG seed for reproducible layout.
+    doc_filter : set[str] | None
+        If provided, only the filenames in this set are processed.
+        e.g. {"paper1.pdf", "paper3.pdf"}.  If None, all PDFs are run.
 
     Returns a dict with three keys:
         "nodes"             : list[dict] — layout + clustering output contract
@@ -266,11 +322,23 @@ def run_pipeline(pdf_folder: Path, seed: int = 42) -> dict:
     """
     rng = np.random.default_rng(seed=seed)
 
-    pdf_files = sorted(pdf_folder.glob("*.pdf"))
-    if not pdf_files:
+    all_pdf_files = sorted(pdf_folder.glob("*.pdf"))
+    if not all_pdf_files:
         raise ValueError(f"No PDF files found in '{pdf_folder}'")
 
-    # --- EMBEDDING (all docs up front) ---
+    # Apply optional document filter
+    if doc_filter:
+        pdf_files = [f for f in all_pdf_files if f.name in doc_filter]
+        if not pdf_files:
+            raise ValueError(
+                f"None of the requested documents were found in '{pdf_folder}'. "
+                f"Requested: {sorted(doc_filter)}"
+            )
+        logger.info("doc_filter active: running %d/%d PDFs", len(pdf_files), len(all_pdf_files))
+    else:
+        pdf_files = all_pdf_files
+
+    # --- EMBEDDING (with cache) ---
     logger.info("Loading embedding model...")
     model = load_model()
 
@@ -286,17 +354,24 @@ def run_pipeline(pdf_folder: Path, seed: int = 42) -> dict:
 
     embeddings_all = np.array(embeddings_list)
 
+    # Apply active user constraints
+    unconstrained_docs, unconstrained_indices, forced_assignments = apply_constraints(
+        docs_all, embeddings_list
+    )
+
     # --- SINGLE-PASS CLUSTER + LAYOUT ---
-    logger.info("Clustering %d documents...", len(docs_all))
+    logger.info("Clustering %d documents (%d constrained)...", len(docs_all), len(forced_assignments))
     
     nodes, (iters, energy), labels = _run_phase(
-        docs_all, embeddings_all, rng, existing_nodes=None, max_iters=MAX_ITERATIONS_INITIAL
+        docs_all, embeddings_all, rng, existing_nodes=None, max_iters=MAX_ITERATIONS_INITIAL,
+        forced_assignments=forced_assignments,
     )
     
     logger.info("Layout converged in %d iterations (energy=%.4f)", iters, energy)
 
     # --- EVALUATION ---
     evaluation = compute_evaluation(embeddings_all, labels)
+    csr, applied, violated = evaluate_constraint_satisfaction(nodes, forced_assignments)
 
     # --- SERIALISE ---
     result_nodes = []
@@ -319,11 +394,17 @@ def run_pipeline(pdf_folder: Path, seed: int = 42) -> dict:
         eval_dict = {
             "silhouette_score": evaluation.silhouette_score,
             "num_clusters": evaluation.num_clusters,
-            # constraint_satisfaction_rate is None until manual-correction /
-            # constraint-storage is implemented (see PROGRESS.md Next Steps).
-            "constraint_satisfaction_rate": evaluation.constraint_satisfaction_rate,
-            "num_constraints_applied": evaluation.num_constraints_applied,
-            "num_constraints_violated": evaluation.num_constraints_violated,
+            "constraint_satisfaction_rate": csr,
+            "num_constraints_applied": applied,
+            "num_constraints_violated": violated,
+        }
+    elif applied > 0:
+        eval_dict = {
+            "silhouette_score": None,
+            "num_clusters": len({n.cluster_id for n in nodes if not n.cluster_id.startswith("noise-")}),
+            "constraint_satisfaction_rate": csr,
+            "num_constraints_applied": applied,
+            "num_constraints_violated": violated,
         }
 
     return {
