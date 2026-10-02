@@ -91,10 +91,8 @@ def _run_analysis_only(pdf_folder: Path) -> dict:
     from backend.embeddings.pipeline import (
         extract_text_from_pdf, chunk_text, embed_document_chunks, MODEL_NAME
     )
-    from backend.clustering.pipeline import (
-        cluster_embeddings, assign_stable_cluster_ids,
-        compute_boundary_flags, compute_evaluation
-    )
+    from backend.clustering.pipeline import run_constraint_aware_clustering
+    from backend.clustering.constraints import load_constraints
 
     model = _get_model()
     pdf_files = sorted(pdf_folder.glob("*.pdf"))
@@ -123,28 +121,25 @@ def _run_analysis_only(pdf_folder: Path) -> dict:
 
     embeddings_all = np.array(embeddings_list)
 
-    # Cluster (fast)
-    labels, centers = cluster_embeddings(embeddings_all)
-    boundary_flags = compute_boundary_flags(embeddings_all, labels, centers)
-    label_to_uuid = assign_stable_cluster_ids(docs_all, labels, STATE_FILE)
-    evaluation = compute_evaluation(embeddings_all, labels)
+    constraints = load_constraints()
+    forced_assignments = {c.doc_id: c.forced_cluster_id for c in constraints}
+
+    clustering_res = run_constraint_aware_clustering(
+        docs_all, embeddings_all, state_file=STATE_FILE, forced_assignments=forced_assignments
+    )
+    doc_cluster_ids = clustering_res["doc_cluster_ids"]
+    boundary_flags = clustering_res["boundary_flags"]
+    evaluation = clustering_res["evaluation"]
 
     # Build per-cluster groupings for the UI
     cluster_groups: dict[str, dict] = {}
     for i, doc in enumerate(docs_all):
-        label = labels[i]
-        if label == -1:
+        cid = doc_cluster_ids[i]
+        if cid.startswith("noise-"):
             cid = "noise"
-        else:
-            cid = label_to_uuid[label]
 
         is_boundary_flag = boundary_flags[i]
-        # boundary_flags returns tuples (is_boundary, sec_lbl, sec_weight) for
-        # non-noise docs, and False for noise docs.
-        if isinstance(is_boundary_flag, tuple):
-            is_boundary = bool(is_boundary_flag[0])
-        else:
-            is_boundary = False
+        is_boundary = bool(is_boundary_flag[0]) if isinstance(is_boundary_flag, (tuple, list)) else bool(is_boundary_flag)
 
         if cid not in cluster_groups:
             cluster_groups[cid] = {"cluster_id": cid, "documents": [], "boundary_documents": []}

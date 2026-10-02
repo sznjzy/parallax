@@ -33,6 +33,7 @@ Data format (constraints.json)
 
 import json
 import logging
+import numpy as np
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -143,7 +144,8 @@ def get_constraint(doc_id: str) -> "Constraint | None":
 
 def apply_constraints(
     docs: list[dict],
-    embeddings_list: list,
+    embeddings_list: list | np.ndarray,
+    constraints_override: list[Constraint] | None = None,
 ) -> tuple[list[dict], list[int], dict[str, str]]:
     """
     Split the document list into:
@@ -154,8 +156,10 @@ def apply_constraints(
     ----------
     docs : list[dict]
         All documents, each with at least {"id": "doc-paper1.pdf", ...}.
-    embeddings_list : list[np.ndarray]
-        Parallel list of embeddings (same length as docs).
+    embeddings_list : list[np.ndarray] | np.ndarray
+        Parallel list/array of embeddings (same length as docs).
+    constraints_override : list[Constraint] | None
+        Optional explicit constraint list to bypass reading from disk.
 
     Returns
     -------
@@ -163,7 +167,7 @@ def apply_constraints(
     unconstrained_indices : list[int]    — original indices into docs/embeddings
     forced_assignments    : dict[str, str] — doc_id → forced_cluster_id
     """
-    constraints = load_constraints()
+    constraints = constraints_override if constraints_override is not None else load_constraints()
     constraint_map = {c.doc_id: c.forced_cluster_id for c in constraints}
 
     unconstrained_docs: list[dict] = []
@@ -183,7 +187,7 @@ def apply_constraints(
 
 
 def evaluate_constraint_satisfaction(
-    nodes: list,  # list of Node dataclass instances
+    nodes: list,  # list of Node dataclass instances, dicts, or objects with doc_id and cluster_id
     forced_assignments: dict[str, str],
 ) -> tuple[float | None, int, int]:
     """
@@ -195,16 +199,23 @@ def evaluate_constraint_satisfaction(
     if not forced_assignments:
         return None, 0, 0
 
-    node_map = {n.doc_id: n for n in nodes}
-    applied   = 0
-    violated  = 0
+    node_map: dict[str, str] = {}
+    for n in nodes:
+        if isinstance(n, dict):
+            if "doc_id" in n and "cluster_id" in n:
+                node_map[n["doc_id"]] = n["cluster_id"]
+        elif hasattr(n, "doc_id") and hasattr(n, "cluster_id"):
+            node_map[getattr(n, "doc_id")] = getattr(n, "cluster_id")
+
+    applied = 0
+    violated = 0
 
     for doc_id, forced_cluster in forced_assignments.items():
-        node = node_map.get(doc_id)
-        if node is None:
-            continue  # Doc was skipped (empty PDF) — don't count it.
+        assigned_cluster = node_map.get(doc_id)
+        if assigned_cluster is None:
+            continue  # Doc was skipped (empty PDF or not in corpus) — don't count it.
         applied += 1
-        if node.cluster_id != forced_cluster:
+        if assigned_cluster != forced_cluster:
             violated += 1
 
     if applied == 0:
@@ -212,3 +223,4 @@ def evaluate_constraint_satisfaction(
 
     rate = (applied - violated) / applied
     return rate, applied, violated
+

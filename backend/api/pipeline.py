@@ -56,6 +56,7 @@ from backend.clustering.pipeline import (
     assign_stable_cluster_ids,
     compute_boundary_flags,
     compute_evaluation,
+    run_constraint_aware_clustering,
     ClusteringOutput,
     EvaluationContract,
 )
@@ -89,52 +90,24 @@ SAMPLE_DOCS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "samp
 def _map_to_nodes(
     docs: list[dict],
     embeddings: np.ndarray,
-    labels: np.ndarray,
-    centers: dict,
-    boundary_flags: list[bool],
-    label_to_uuid: dict,
+    doc_cluster_ids: list[str],
+    boundary_flags: list[tuple[bool, str | None, float]],
     existing_nodes: list[Node] | None,
     rng: np.random.Generator,
     forced_assignments: dict[str, str] | None = None,
 ) -> list[Node]:
     """
     Map clustering outputs to layout Node objects.
-
-    Uses the canonical compute_boundary_flags() result (pre-computed by the
-    caller) so there is exactly one implementation of boundary-detection logic.
-    Secondary cluster and weight are derived from the same cosine-similarity
-    computation used by compute_boundary_flags().
     """
     nodes: list[Node] = []
     existing_map = {n.doc_id: n for n in existing_nodes} if existing_nodes else {}
 
-    cids = [cid for cid in centers.keys() if cid != -1]
-    center_matrix = np.array([centers[cid] for cid in cids]) if len(cids) >= 2 else None
-
     for i, doc in enumerate(docs):
         doc_id = doc["id"]
-        label = labels[i]
-        emb = embeddings[i]
-
-        # --- Cluster ID and secondary cluster ---
-        if forced_assignments and doc_id in forced_assignments:
-            cluster_id_str = forced_assignments[doc_id]
-            is_boundary = False
-            sec_cluster = None
-            sec_weight = 0.0
-        elif label == -1:
-            cluster_id_str = f"noise-{doc_id}"
-            sec_cluster = None
-            sec_weight = 0.0
-            is_boundary = False
-        else:
-            cluster_id_str = label_to_uuid[label]
-            is_boundary, sec_lbl, sec_weight = boundary_flags[i]
-            sec_cluster = label_to_uuid.get(sec_lbl) if sec_lbl is not None else None
-
+        cluster_id_str = doc_cluster_ids[i]
         is_constrained = bool(forced_assignments and doc_id in forced_assignments)
+        is_boundary, sec_cluster, sec_weight = boundary_flags[i]
 
-        # --- Position ---
         if doc_id in existing_map:
             # Incremental update: keep old positions, update cluster.
             old_node = existing_map[doc_id]
@@ -189,31 +162,32 @@ def _run_phase(
     existing_nodes: list[Node] | None,
     max_iters: int,
     forced_assignments: dict[str, str] | None = None,
-) -> tuple[list[Node], tuple[int, float], np.ndarray]:
+) -> tuple[list[Node], tuple[int, float], dict]:
     """
-    Cluster + layout one phase. Returns (nodes_after_sim, (iters, energy), labels).
+    Cluster + layout one phase using true constraint-aware clustering.
+    Returns: (nodes_after_sim, (iters, energy), clustering_result).
     """
-    labels, centers = cluster_embeddings(embeddings)
-    boundary_flags = compute_boundary_flags(embeddings, labels, centers)
-    label_to_uuid = assign_stable_cluster_ids(docs, labels, STATE_FILE)
+    clustering_res = run_constraint_aware_clustering(
+        docs, embeddings, state_file=STATE_FILE, forced_assignments=forced_assignments
+    )
+    doc_cluster_ids = clustering_res["doc_cluster_ids"]
+    boundary_flags = clustering_res["boundary_flags"]
 
     nodes = _map_to_nodes(
-        docs, embeddings, labels, centers, boundary_flags,
-        label_to_uuid, existing_nodes, rng,
+        docs, embeddings, doc_cluster_ids, boundary_flags,
+        existing_nodes, rng,
         forced_assignments=forced_assignments,
     )
 
     # Wire compute_home_positions into simulate() — the validated stable mode.
     cluster_ids_in_phase = list({n.cluster_id for n in nodes})
     home_positions = compute_home_positions(cluster_ids_in_phase)
-    # Noise nodes (cluster_id like "noise-<doc_id>") won't be in home_positions;
-    # fall back to canvas centre for those.
     for n in nodes:
         if n.cluster_id not in home_positions:
             home_positions[n.cluster_id] = (CANVAS_WIDTH / 2.0, CANVAS_HEIGHT / 2.0)
 
     iters, energy = simulate(nodes, max_iters=max_iters, cluster_home_positions=home_positions)
-    return nodes, (iters, energy), labels
+    return nodes, (iters, energy), clustering_res
 
 
 # ---------------------------------------------------------------------------
@@ -359,19 +333,17 @@ def run_pipeline(
         docs_all, embeddings_list
     )
 
-    # --- SINGLE-PASS CLUSTER + LAYOUT ---
+    # --- SINGLE-PASS CONSTRAINT-AWARE CLUSTER + LAYOUT ---
     logger.info("Clustering %d documents (%d constrained)...", len(docs_all), len(forced_assignments))
     
-    nodes, (iters, energy), labels = _run_phase(
+    nodes, (iters, energy), clustering_res = _run_phase(
         docs_all, embeddings_all, rng, existing_nodes=None, max_iters=MAX_ITERATIONS_INITIAL,
         forced_assignments=forced_assignments,
     )
     
     logger.info("Layout converged in %d iterations (energy=%.4f)", iters, energy)
 
-    # --- EVALUATION ---
-    evaluation = compute_evaluation(embeddings_all, labels)
-    csr, applied, violated = evaluate_constraint_satisfaction(nodes, forced_assignments)
+    evaluation = clustering_res["evaluation"]
 
     # --- SERIALISE ---
     result_nodes = []
@@ -394,17 +366,9 @@ def run_pipeline(
         eval_dict = {
             "silhouette_score": evaluation.silhouette_score,
             "num_clusters": evaluation.num_clusters,
-            "constraint_satisfaction_rate": csr,
-            "num_constraints_applied": applied,
-            "num_constraints_violated": violated,
-        }
-    elif applied > 0:
-        eval_dict = {
-            "silhouette_score": None,
-            "num_clusters": len({n.cluster_id for n in nodes if not n.cluster_id.startswith("noise-")}),
-            "constraint_satisfaction_rate": csr,
-            "num_constraints_applied": applied,
-            "num_constraints_violated": violated,
+            "constraint_satisfaction_rate": evaluation.constraint_satisfaction_rate,
+            "num_constraints_applied": evaluation.num_constraints_applied,
+            "num_constraints_violated": evaluation.num_constraints_violated,
         }
 
     return {
@@ -422,10 +386,6 @@ def main():
     """
     CLI stress-test: runs the Phase 1 / Phase 2 holdback experiment that was
     used to validate stability in PROGRESS.md.
-
-    This does NOT call run_pipeline() because it needs to inspect intermediate
-    state (p1_nodes positions before Phase 2 overwrites them).  The live API
-    endpoint uses run_pipeline() instead.
     """
     logging.basicConfig(level=logging.WARNING)  # suppress library noise in CLI output
     print("==================================================")
@@ -470,7 +430,7 @@ def main():
     p1_docs = [d for d in docs_all if d["filename"] not in holdback_names]
     p1_embeddings = np.array([doc_data[d["id"]] for d in p1_docs])
 
-    p1_nodes, (iters_p1, energy_p1), p1_labels = _run_phase(
+    p1_nodes, (iters_p1, energy_p1), p1_res = _run_phase(
         p1_docs, p1_embeddings, rng, existing_nodes=None, max_iters=MAX_ITERATIONS_INITIAL
     )
 
@@ -489,7 +449,7 @@ def main():
     p2_docs = docs_all
     p2_embeddings = embeddings_all
 
-    p2_nodes, (iters_p2, energy_p2), p2_labels = _run_phase(
+    p2_nodes, (iters_p2, energy_p2), p2_res = _run_phase(
         p2_docs, p2_embeddings, rng, existing_nodes=p1_nodes, max_iters=MAX_ITERATIONS
     )
 
@@ -510,10 +470,13 @@ def main():
         print(f"  {fn:12s} {marker:5s} {boundary:10s} | Cluster: {n.cluster_id:10s} | pos: ({n.x:6.1f}, {n.y:6.1f})")
 
     # Evaluation
-    p2_eval = compute_evaluation(p2_embeddings, p2_labels)
+    p2_eval = p2_res["evaluation"]
     if p2_eval:
         print(f"\nPhase 2 Evaluation:")
-        print(f"  Silhouette score: {p2_eval.silhouette_score:.4f}")
+        if p2_eval.silhouette_score is not None:
+            print(f"  Silhouette score: {p2_eval.silhouette_score:.4f}")
+        else:
+            print(f"  Silhouette score: None")
         print(f"  Num clusters:     {p2_eval.num_clusters}")
 
 

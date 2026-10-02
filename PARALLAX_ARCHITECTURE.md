@@ -84,9 +84,16 @@ parallax/
 - **Boundary Detection**: `compute_boundary_flags()` compares cosine similarities of document embedding against cluster centroids. If $(\text{sim}_{\text{top1}} - \text{sim}_{\text{top2}}) < \text{BOUNDARY\_MARGIN}$ (0.05), document is flagged `is_boundary_document=True` and receives secondary cluster coupling.
 - **Stable Identity**: `assign_stable_cluster_ids()` tracks cluster continuity across runs by calculating overlap percentage $\frac{|\text{New} \cap \text{Old}|}{|\text{Old}|} \ge 0.5$, persisting mappings to `backend/api/cluster_mapping.json` with corpus pruning.
 
-### 4. Constraint Processing (Baseline Status)
+### 4. Constraint Processing (True Constraint-Aware Flow — ADR-001)
 - **Schema**: `Constraint(doc_id, forced_cluster_id, created_at, source)` persisted to `backend/api/constraints.json`.
-- **Audit Finding**: In the baseline implementation (`backend/api/pipeline.py`), `apply_constraints()` separates docs into unconstrained and forced mappings, but `_run_phase()` currently passes all document embeddings to `cluster_embeddings()`. Forced cluster assignments are only applied post-hoc in `_map_to_nodes()`. True constraint-aware separation (excluding constrained documents prior to HDBSCAN) is scheduled for Phase 1.
+- **Pipeline Implementation**: `run_constraint_aware_clustering()` in `backend/clustering/pipeline.py` implements the strict ADR-001 lifecycle:
+  1. Constrained documents are separated from unconstrained documents prior to clustering.
+  2. HDBSCAN runs strictly on unconstrained document embeddings, completely preventing manual constraints from distorting unconstrained density estimates and cluster formation.
+  3. Stable cluster UUIDs are assigned to discovered clusters via overlap matching.
+  4. Constrained documents are merged directly into their forced cluster assignments.
+  5. Global cluster centroids are calculated across all active cluster members.
+  6. Boundary document flags and secondary cluster couplings are evaluated against global centroids.
+  7. Evaluation contract calculates both Silhouette score and exact Constraint Satisfaction Rate (`(applied - violated) / applied`).
 
 ### 5. Layout Physics Simulation
 - **Canvas Size**: 400×300 coordinate space.
@@ -120,13 +127,13 @@ parallax/
 | DELETE | `/api/constraints` | Clear all user constraints |
 | POST | `/api/analyze` | Fast demo endpoint (clustering only, no physics layout) |
 
-## Known Limitations & Deviations Identified in Phase 0
+## Known Limitations & Deviations Identified
 
-1. **Constrained Document Separation**: Baseline pipeline runs HDBSCAN over all embeddings and overwrites cluster IDs post-hoc instead of removing constrained documents before clustering (addressed in Phase 1).
-2. **Scratch Files**: Multiple scratch test scripts exist in the repository root (`scratch_test_*.py`, `scratch_*.js`) from prior ad-hoc checks; these need to be consolidated or replaced with clean automated tests in Phase 3.
-3. **PDF Ingestion Endpoint**: Live PDF upload is currently available only via `/api/analyze` for fast demo; unified upload to `data/sample_docs/` with cache invalidation is scheduled for Phase 4.
-4. **Topic Modeling**: Cluster labeling is currently UUID-based without automated c-TF-IDF keyword extraction (scheduled for Phase 5).
+1. **Scratch Files**: Multiple scratch test scripts exist in the repository root (`scratch_test_*.py`, `scratch_*.js`) from prior ad-hoc checks; these need to be consolidated or replaced with clean automated tests in Phase 3.
+2. **PDF Ingestion Endpoint**: Live PDF upload is currently available only via `/api/analyze` for fast demo; unified upload to `data/sample_docs/` with cache invalidation is scheduled for Phase 4.
+3. **Topic Modeling**: Cluster labeling is currently UUID-based without automated c-TF-IDF keyword extraction (scheduled for Phase 5).
 
 ## Architecture Change Log
 
 - **Phase 0 (2026-10-02)**: Complete baseline audit performed and documented. System structure, data flow, physics layout, and constraint pipeline audited against source code.
+- **Phase 1 (2026-10-02)**: Implemented true constraint-aware clustering pipeline (`run_constraint_aware_clustering()`), separating constrained documents before HDBSCAN execution, merging forced assignments, computing global centroids and boundaries, and adding dedicated test suite `test_constraint_aware_clustering.py`.

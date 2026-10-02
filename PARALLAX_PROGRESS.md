@@ -4,7 +4,7 @@ This file records the actual implementation state of the Parallax repository.
 
 ## Current Phase
 
-Phase 1 — Fix Core Clustering + Constraint Architecture
+Phase 2 — Stable Cluster Identity + Layout Correctness
 
 ## Status
 
@@ -13,17 +13,18 @@ READY FOR APPROVAL
 ## Completed Phases
 
 - **Phase 0 — Existing System Audit**: Audited repository structure, backend pipeline, frontend components, physics simulation, constraint mechanism, and existing test suites.
+- **Phase 1 — Fix Core Clustering + Constraint Architecture**: Implemented true constraint-aware clustering (ADR-001) in `backend/clustering/pipeline.py` via `run_constraint_aware_clustering()`. Constrained documents are separated prior to HDBSCAN, forced cluster IDs merged, global cluster centroids computed, boundary flags derived, and evaluation contracts computed.
 
 ## Current Phase Notes
 
-Phase 0 audit confirmed that constrained documents are currently processed by HDBSCAN alongside unconstrained documents, with cluster IDs overridden post-hoc in `_map_to_nodes()`. Phase 1 will implement genuine separation of constrained documents prior to unconstrained clustering according to ADR-001.
+Phase 1 established genuine separation of constrained documents before unconstrained clustering. Phase 2 will focus on stable cluster UUID continuity, deterministic cluster home positions, and spatial stability across incremental additions.
 
 ## Phase History
 
 | Phase | Status | Commit | Notes |
 |---|---|---|---|
-| 0 | COMPLETE | db92c38 | Existing system audit: verified architecture, baseline execution, and identified constraint handling discrepancy |
-| 1 | NOT STARTED | — | Fix core clustering + constraint architecture |
+| 0 | COMPLETE | 26e25d0 | Existing system audit: verified architecture, baseline execution, and identified constraint handling discrepancy |
+| 1 | COMPLETE | e5f972d | True constraint-aware clustering: separate constrained docs before HDBSCAN, global centroid merging, unit test suite |
 | 2 | NOT STARTED | — | Stable cluster identity and layout |
 | 3 | NOT STARTED | — | Testing and evaluation foundation |
 | 4 | NOT STARTED | — | PDF ingestion and caching |
@@ -42,7 +43,7 @@ Phase 0 audit confirmed that constrained documents are currently processed by HD
 
 ## Open Issues
 
-1. Constrained documents are included in HDBSCAN density calculation before post-hoc re-labeling in `backend/api/pipeline.py` (to be resolved in Phase 1).
+None currently active for completed phases.
 
 ## Rules
 
