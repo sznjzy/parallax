@@ -23,7 +23,8 @@ parallax/
 │   │   ├── pipeline.py              # Text extraction, chunking, all-mpnet-base-v2 embedding
 │   │   └── embedding_cache.py       # SHA-256 disk cache for embeddings
 │   ├── ingestion/
-│   │   └── __init__.py              # Ingestion package marker
+│   │   ├── __init__.py              # Ingestion package marker
+│   │   └── ingest.py                # Safe PDF validation, deduplication, chunking, disk caching, deletion
 │   ├── layout/
 │   │   └── physics.py               # 2D force-directed simulation and deterministic angular anchors
 │   └── tests/
@@ -35,7 +36,8 @@ parallax/
 │       ├── test_clustering_quality.py          # HDBSCAN/KMeans silhouette benchmarks & boundary detection
 │       ├── test_constraint_impact.py           # Constraint satisfaction & reassignment impact
 │       ├── test_spatial_stability.py           # Force simulation energy convergence & margin clamping
-│       └── test_api_endpoints.py               # FastAPI test client integration & constraint CRUD
+│       ├── test_api_endpoints.py               # FastAPI test client integration & constraint CRUD
+│       └── test_pdf_ingestion_and_caching.py   # PDF magic byte validation, hash deduplication, live caching, upload/delete API
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx                  # Root UI layout, health checking, topbar
@@ -126,6 +128,8 @@ parallax/
 | GET | `/api/status` | Readiness check (PDF count, dependency availability) |
 | POST | `/api/organize` | Execute embedding, clustering, physics layout pipeline |
 | GET | `/api/documents` | List available PDFs in corpus with cache status |
+| POST | `/api/documents/upload` | Multi-PDF upload with validation, deduplication, and immediate caching |
+| DELETE | `/api/documents/{filename}` | Delete PDF from corpus with constraint and state pruning |
 | GET | `/api/documents/{filename}/pdf` | Stream PDF file for in-browser viewing |
 | GET | `/api/constraints` | List all active user constraints |
 | POST | `/api/constraints` | Create or update user constraint (idempotent PUT) |
@@ -135,9 +139,8 @@ parallax/
 
 ## Known Limitations & Deviations Identified
 
-1. **Scratch Files**: Multiple scratch test scripts exist in the repository root (`scratch_test_*.py`, `scratch_*.js`) from prior ad-hoc checks; these need to be consolidated or replaced with clean automated tests in Phase 3.
-2. **PDF Ingestion Endpoint**: Live PDF upload is currently available only via `/api/analyze` for fast demo; unified upload to `data/sample_docs/` with cache invalidation is scheduled for Phase 4.
-3. **Topic Modeling**: Cluster labeling is currently UUID-based without automated c-TF-IDF keyword extraction (scheduled for Phase 5).
+1. **Topic Modeling**: Cluster labeling is currently UUID-based without automated c-TF-IDF keyword extraction (scheduled for Phase 5).
+2. **Semantic Search**: Text search across cluster canvas vectors and chunk-level highlighting is scheduled for Phase 6.
 
 ## Architecture Change Log
 
@@ -145,3 +148,4 @@ parallax/
 - **Phase 1 (2026-10-02)**: Implemented true constraint-aware clustering pipeline (`run_constraint_aware_clustering()`), separating constrained documents before HDBSCAN execution, merging forced assignments, computing global centroids and boundaries, and adding dedicated test suite `test_constraint_aware_clustering.py`.
 - **Phase 2 (2026-10-02)**: Verified and hardened stable cluster UUID lineage across incremental updates with full state persistence, fixed cyclic angular relaxation in `compute_home_positions()` using pairwise shortest-arc resolution, and added dedicated test suite `test_stable_identity_and_layout.py`.
 - **Phase 3 (2026-10-02)**: Established comprehensive automated testing and evaluation foundation: modular synthetic corpus fixtures (`synthetic_corpora.py`), test suites for clustering quality, constraint impact, spatial stability, and API endpoints, and a unified test discovery runner `run_all_tests.py` covering 28 test cases with zero external runtime dependencies.
+- **Phase 4 (2026-10-02)**: Implemented production-grade PDF upload, validation, deduplication, text chunking, and immediate `.npy` disk caching in `backend/ingestion/ingest.py`, exposed `POST /api/documents/upload` and `DELETE /api/documents/{filename}`, added comprehensive test suite `test_pdf_ingestion_and_caching.py` (35/35 tests passing), and added frontend upload/delete controls in `EvaluationPanel.jsx`.

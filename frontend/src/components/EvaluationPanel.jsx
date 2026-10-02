@@ -14,14 +14,17 @@
  *   2. Layout stability        → this metric is computed offline; not live
  *   3. Constraint satisfaction → target > 0.95 (null until constraints built)
  */
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { useApp } from '../state/AppContext'
 import { useConstraints } from '../hooks/useConstraints'
+import { useDocuments } from '../hooks/useDocuments'
 import { clusterColor } from '../canvas/clusterColor'
 
 export default function EvaluationPanel() {
   const { state, dispatch } = useApp()
   const { removeConstraint, clearAllConstraints } = useConstraints()
+  const { uploadDocuments, deleteDocument, isLoading: docsLoading, uploadStatus } = useDocuments()
+  const fileInputRef = useRef(null)
   const [skippedOpen, setSkippedOpen] = useState(false)
   const [constraintsOpen, setConstraintsOpen] = useState(true)
   const [docsOpen, setDocsOpen] = useState(false)
@@ -31,6 +34,26 @@ export default function EvaluationPanel() {
   const toggleDoc = (filename) => dispatch({ type: 'TOGGLE_DOC', filename })
   const selectAll = () => dispatch({ type: 'SELECT_ALL_DOCS' })
   const clearAll = () => dispatch({ type: 'CLEAR_ALL_DOCS' })
+
+  const handleFileUpload = async (e) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    try {
+      await uploadDocuments(files)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleDeleteDoc = async (e, filename) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (window.confirm(`Delete ${filename} from corpus?`)) {
+      await deleteDocument(filename)
+    }
+  }
 
   const selectedCount = state.selectedDocs?.size ?? 0
   const totalDocs = state.availableDocs.length
@@ -48,27 +71,58 @@ export default function EvaluationPanel() {
 
       <div className="sidebar-body">
 
-        {/* ── Document Selector ────────────────────────────────────── */}
-        {state.availableDocs.length > 0 && (
-          <div className="glass-card">
-            <div
-              className="collapse-header"
-              onClick={() => setDocsOpen(o => !o)}
-              id="collapse-docs"
-              aria-expanded={docsOpen}
-            >
-              <span className="glass-card-title" style={{ margin: 0 }}>
-                Documents&nbsp;
-                <span className="badge badge-accent" style={{ fontSize: '0.65rem', padding: '0 6px' }}>
-                  {selectedCount}/{totalDocs}
-                </span>
+        {/* ── Document Selector & Upload ─────────────────────────── */}
+        <div className="glass-card">
+          <div
+            className="collapse-header"
+            onClick={() => setDocsOpen(o => !o)}
+            id="collapse-docs"
+            aria-expanded={docsOpen}
+          >
+            <span className="glass-card-title" style={{ margin: 0 }}>
+              Documents&nbsp;
+              <span className="badge badge-accent" style={{ fontSize: '0.65rem', padding: '0 6px' }}>
+                {selectedCount}/{totalDocs}
               </span>
-              <span className={`collapse-arrow ${docsOpen ? 'open' : ''}`}>▶</span>
-            </div>
+            </span>
+            <span className={`collapse-arrow ${docsOpen ? 'open' : ''}`}>▶</span>
+          </div>
 
-            {docsOpen && (
-              <div style={{ marginTop: 8 }}>
-                {/* Select All / Clear buttons */}
+          {docsOpen && (
+            <div style={{ marginTop: 8 }}>
+              {/* Upload PDF Section */}
+              <div style={{ marginBottom: 8 }}>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  multiple
+                  accept=".pdf,application/pdf"
+                  style={{ display: 'none' }}
+                  id="pdf-upload-input"
+                />
+                <button
+                  className="btn btn-primary"
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '5px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={docsLoading}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  {docsLoading ? 'Processing...' : 'Upload Research PDFs'}
+                </button>
+                {uploadStatus && (
+                  <div style={{ fontSize: '0.7rem', color: 'var(--color-accent)', marginTop: 4, textAlign: 'center' }}>
+                    {uploadStatus}
+                  </div>
+                )}
+              </div>
+
+              {/* Select All / Clear buttons */}
+              {totalDocs > 0 && (
                 <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                   <button
                     className="btn btn-ghost"
@@ -87,82 +141,94 @@ export default function EvaluationPanel() {
                     Clear
                   </button>
                 </div>
+              )}
 
-                {/* Doc list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 240, overflowY: 'auto' }}>
-                  {state.availableDocs.map(doc => {
-                    const checked = state.selectedDocs?.has(doc.filename) ?? false
-                    const label = doc.filename.replace('.pdf', '')
-                    return (
-                      <label
-                        key={doc.filename}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          padding: '3px 6px',
-                          borderRadius: 'var(--radius-sm)',
-                          cursor: 'pointer',
-                          background: checked ? 'var(--color-surface-2)' : 'transparent',
-                          border: `1px solid ${checked ? 'var(--color-border)' : 'transparent'}`,
-                          transition: 'background 0.15s',
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleDoc(doc.filename)}
-                          style={{ accentColor: 'var(--color-accent)', cursor: 'pointer' }}
-                        />
-                        <span style={{ fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {label}
-                        </span>
-                        {doc.cached && (
-                          <span
-                            title="Embedding cached — will load instantly"
-                            style={{
-                              fontSize: '0.6rem',
-                              padding: '1px 5px',
-                              borderRadius: 999,
-                              background: 'rgba(34,197,94,0.15)',
-                              color: '#22c55e',
-                              border: '1px solid rgba(34,197,94,0.3)',
-                              flexShrink: 0,
-                            }}
-                          >
-                            cached
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-icon"
-                          style={{ padding: 2, width: 20, height: 20, flexShrink: 0, opacity: 0.7 }}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            dispatch({ type: 'VIEW_DOCUMENT', filename: doc.filename })
+              {/* Doc list */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 240, overflowY: 'auto' }}>
+                {state.availableDocs.map(doc => {
+                  const checked = state.selectedDocs?.has(doc.filename) ?? false
+                  const label = doc.filename.replace('.pdf', '')
+                  return (
+                    <label
+                      key={doc.filename}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '3px 6px',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        background: checked ? 'var(--color-surface-2)' : 'transparent',
+                        border: `1px solid ${checked ? 'var(--color-border)' : 'transparent'}`,
+                        transition: 'background 0.15s',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleDoc(doc.filename)}
+                        style={{ accentColor: 'var(--color-accent)', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {label}
+                      </span>
+                      {doc.cached && (
+                        <span
+                          title="Embedding cached — will load instantly"
+                          style={{
+                            fontSize: '0.6rem',
+                            padding: '1px 5px',
+                            borderRadius: 999,
+                            background: 'rgba(34,197,94,0.15)',
+                            color: '#22c55e',
+                            border: '1px solid rgba(34,197,94,0.3)',
+                            flexShrink: 0,
                           }}
-                          title={`Open ${doc.filename} in PDF viewer`}
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                          </svg>
-                        </button>
-                      </label>
-                    )
-                  })}
-                </div>
-
-                {noneSelected && (
-                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-error)', marginTop: 6, fontStyle: 'italic' }}>
-                    Select at least one document to run the pipeline.
-                  </p>
-                )}
+                          cached
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon"
+                        style={{ padding: 2, width: 20, height: 20, flexShrink: 0, opacity: 0.7 }}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          dispatch({ type: 'VIEW_DOCUMENT', filename: doc.filename })
+                        }}
+                        title={`Open ${doc.filename} in PDF viewer`}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon"
+                        style={{ padding: 2, width: 20, height: 20, flexShrink: 0, opacity: 0.6, color: 'var(--color-error)' }}
+                        onClick={(e) => handleDeleteDoc(e, doc.filename)}
+                        title={`Delete ${doc.filename}`}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </label>
+                  )
+                })}
               </div>
-            )}
-          </div>
-        )}
+
+              {noneSelected && (
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-error)', marginTop: 6, fontStyle: 'italic' }}>
+                  Select at least one document to run the pipeline.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="divider" />
 

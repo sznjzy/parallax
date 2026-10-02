@@ -31,6 +31,11 @@ from backend.clustering.constraints import (
     add_constraint,
     remove_constraint,
 )
+from backend.ingestion.ingest import (
+    save_and_ingest_pdf,
+    delete_document_file,
+    validate_pdf_file,
+)
 
 app = FastAPI(
     title="Parallax API",
@@ -366,6 +371,65 @@ def get_document_pdf(filename: str):
             "Cache-Control": "public, max-age=3600",
         },
     )
+
+
+@app.post("/api/documents/upload", tags=["pipeline"])
+async def upload_documents(files: list[UploadFile] = File(...)):
+    """
+    Robust multi-PDF upload endpoint for live corpus ingestion.
+    Validates PDF signatures, sanitizes filenames, detects duplicates,
+    extracts chunks, and pre-computes / caches document embeddings on disk.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+    if len(files) > 30:
+        raise HTTPException(status_code=400, detail="Maximum 30 PDFs per upload batch.")
+
+    model = _get_model()
+    uploaded_results = []
+    skipped_results = []
+
+    for upload in files:
+        try:
+            content = await upload.read()
+            res = save_and_ingest_pdf(
+                filename=upload.filename or "upload.pdf",
+                content=content,
+                docs_dir=SAMPLE_DOCS_DIR,
+                embed_immediately=True,
+                model=model,
+            )
+            if res["status"] in ("success", "duplicate"):
+                uploaded_results.append(res)
+            else:
+                skipped_results.append(res)
+        except Exception as exc:
+            skipped_results.append({
+                "filename": upload.filename or "unknown.pdf",
+                "doc_id": None,
+                "status": "error",
+                "message": f"Unexpected error during ingestion: {exc}",
+            })
+
+    return {
+        "uploaded": uploaded_results,
+        "skipped": skipped_results,
+        "total_uploaded": len(uploaded_results),
+        "total_skipped": len(skipped_results),
+    }
+
+
+@app.delete("/api/documents/{filename}", tags=["pipeline"], status_code=200)
+def delete_document(filename: str):
+    """
+    Remove a PDF document from the active corpus.
+    Also cleans up associated manual constraints and cluster mapping entries.
+    """
+    deleted = delete_document_file(filename, docs_dir=SAMPLE_DOCS_DIR, state_file=STATE_FILE)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Document '{filename}' not found.")
+    return {"deleted": True, "filename": filename}
+
 
 
 

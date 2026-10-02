@@ -4,7 +4,7 @@ This file records the actual implementation state of the Parallax repository.
 
 ## Current Phase
 
-Phase 4 — PDF Ingestion + Caching Hardening
+Phase 5 — Cluster Topic Modeling (c-TF-IDF / KeyBERT)
 
 ## Status
 
@@ -16,10 +16,11 @@ READY FOR APPROVAL
 - **Phase 1 — Fix Core Clustering + Constraint Architecture**: Implemented true constraint-aware clustering (ADR-001) in `backend/clustering/pipeline.py` via `run_constraint_aware_clustering()`. Constrained documents are separated prior to HDBSCAN, forced cluster IDs merged, global cluster centroids computed, boundary flags derived, and evaluation contracts computed.
 - **Phase 2 — Stable Cluster Identity + Layout Correctness**: Verified and hardened stable cluster UUID tracking across incremental updates with full state persistence, fixed circular shortest-arc angular relaxation in `compute_home_positions()`, and verified deterministic spatial anchoring and force-directed simulation stability.
 - **Phase 3 — Testing + Evaluation Foundation**: Established synthetic corpora generators (`backend/tests/fixtures/synthetic_corpora.py`), comprehensive automated test suites for clustering quality, constraint impact, spatial stability, and API endpoints, and replaced legacy scratch test runners with a unified test discovery runner `run_all_tests.py` (28/28 unit tests passing).
+- **Phase 4 — PDF Ingestion + Caching Hardening**: Implemented robust PDF validation (magic byte `%PDF-` checks, size limits, filename sanitization/traversal defense), content-hash SHA-256 deduplication, automatic text chunking and immediate `.npy` disk caching in `backend/ingestion/ingest.py`, `POST /api/documents/upload` and `DELETE /api/documents/{filename}` endpoints, and connected UI file upload controls in `EvaluationPanel.jsx` (35/35 unit tests passing).
 
 ## Current Phase Notes
 
-Phase 3 established the full testing and evaluation foundation. All 28 automated tests across clustering quality, constraint impact, spatial stability, identity lineage, and API endpoints pass reliably. Phase 4 will harden PDF ingestion, text extraction error boundaries, and cache validation.
+Phase 4 established production-grade PDF upload, validation, deduplication, deletion, and immediate embedding caching. All 35 automated tests pass. Phase 5 will implement automated cluster topic modeling via c-TF-IDF / KeyBERT keyword extraction.
 
 ## Phase History
 
@@ -28,8 +29,8 @@ Phase 3 established the full testing and evaluation foundation. All 28 automated
 | 0 | COMPLETE | 26e25d0 | Existing system audit: verified architecture, baseline execution, and identified constraint handling discrepancy |
 | 1 | COMPLETE | 37cf1ba | True constraint-aware clustering: separate constrained docs before HDBSCAN, global centroid merging, unit test suite |
 | 2 | COMPLETE | 147da2d | Stable cluster identity and layout: UUID overlap lineage, pairwise circular relaxation, anchor damping |
-| 3 | COMPLETE | 8bbd8ce | Testing and evaluation foundation: synthetic corpora fixtures, modular test suites (quality, constraints, physics, API), unified runner |
-| 4 | NOT STARTED | — | PDF ingestion and caching |
+| 3 | COMPLETE | 22d8384 | Testing and evaluation foundation: synthetic corpora fixtures, modular test suites (quality, constraints, physics, API), unified runner |
+| 4 | COMPLETE | 56147f5 | PDF upload & ingestion hardening: magic bytes validation, deduplication, disk caching, upload/delete API & UI |
 | 5 | NOT STARTED | — | Cluster topic modeling |
 | 6 | NOT STARTED | — | Semantic search and canvas heatmap |
 | 7 | NOT STARTED | — | Cluster lifecycle management |
