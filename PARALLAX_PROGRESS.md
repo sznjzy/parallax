@@ -37,7 +37,7 @@ Phase 5 implemented automatic topic modeling via c-TF-IDF and KeyBERT keyword ex
 | 7 | NOT STARTED | — | Cluster lifecycle management |
 | 8 | NOT STARTED | — | Citation network |
 | 9 | NOT STARTED | — | Semantic frontier / candidate gap radar |
-| 10 | NOT STARTED | — | Research Evidence Explorer |
+| 10 | NOT STARTED | — | Deterministic zero-LLM Research Evidence Explorer (ADR-006, ADR-009) |
 | 11 | NOT STARTED | — | Frontend polish |
 | 12 | NOT STARTED | — | Performance and caching |
 | 13 | NOT STARTED | — | Complete evaluation |

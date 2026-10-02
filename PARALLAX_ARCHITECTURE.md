@@ -152,6 +152,7 @@ parallax/
 
 1. **Semantic Search**: Text search across cluster canvas vectors and chunk-level highlighting is scheduled for Phase 6.
 2. **Cluster Lifecycle**: Interactive cluster rename, merge, and split API endpoints are scheduled for Phase 7.
+3. **Research Evidence Explorer**: Scheduled for Phase 10 as a deterministic, zero-LLM explainability layer grounded exclusively in measurable signals (cosine similarities, c-TF-IDF keywords, centroid distances, citation edges) per ADR-006 / ADR-009.
 
 ## Architecture Change Log
 

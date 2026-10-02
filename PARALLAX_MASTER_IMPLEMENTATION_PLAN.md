@@ -256,29 +256,62 @@ Provide an interpretable radar/visualization.
 
 # Phase 10 — Research Evidence Explorer
 
+Phase 10 is a deterministic, zero-LLM evidence exploration layer.
+
 The goal is to make Parallax explainable, rigorous, and academically useful by allowing users to select a paper, cluster, or candidate research frontier and inspect the underlying evidence behind it.
 
-The feature should provide, where the underlying data supports it:
+> Every explanation shown by the Research Evidence Explorer must be traceable to an underlying measurable signal in the Parallax data model. The system should prefer transparent metrics, rankings, keywords, relationships, and source references over generated prose.
 
-- Why a paper belongs to its cluster
-- Representative papers/documents for the cluster
-- Representative keywords/topics
-- Closest semantically related papers
-- More distant papers or clusters
-- Related clusters
-- Citation relationships where available
-- Similarity scores where meaningful
-- Cluster-level evidence
-- Connections between related clusters
-- Ability to navigate back to the source paper/PDF
+### Non-Negotiable Requirement: Zero LLM Dependency
 
-### Important Requirements
+The Research Evidence Explorer must function completely without:
+- OpenAI
+- Anthropic
+- Gemini
+- Ollama
+- any local LLM
+- any hosted LLM API
+- any generative AI model
+- any LLM-generated explanation
+- any LLM-generated topic interpretation
 
-- **Evidence-Grounded**: All explanations must be grounded in measurable signals (embedding cosine similarity, representative keywords, cluster membership, document-to-cluster centroid distance, citation edges, topic overlap, cluster statistics).
-- **No Hallucinated Claims**: Do NOT fabricate explanations or make unsupported claims about why a paper belongs to a cluster. If an explanation cannot be established from available data, explicitly indicate that.
+Phase 10 must be entirely deterministic/evidence-based using data and models already required by the existing Parallax architecture. The feature must work with network access disabled, except where the application genuinely needs network access for existing non-LLM functionality.
+
+There is NO hidden LLM fallback (do NOT implement "LLM optional", "LLM fallback", "use LLM if available", "AI explanation mode", environment variables for an LLM, API keys for an LLM, or model-provider abstractions for Phase 10). If a future feature wants natural-language summarization, that must be treated as a separate future feature and must not become part of Phase 10.
+
+### Evidence Signals
+
+Evidence must come directly from measurable signals such as:
+- embedding cosine similarity
+- document-to-cluster similarity
+- distance to cluster centroid/representation
+- cluster membership
+- cluster size
+- representative documents
+- representative keywords
+- c-TF-IDF scores
+- topic overlap
+- citation edges
+- citation counts
+- semantic similarity between clusters
+- document ranking
+- existing cluster metadata
+- existing document metadata
+- existing layout/position information where meaningful
+
+The UI should present these signals directly and transparently (e.g., Paper X → Cluster Y showing cluster membership, cosine similarity to cluster representation, top shared terms, nearest documents, citation connections, related clusters, topic overlap). The system explains relationships through these measurable signals rather than generating natural-language claims with an LLM.
+
+### Key Capabilities & Requirements
+
+- **Why a paper belongs to its cluster**: Direct document-to-centroid cosine similarity, top shared terms (c-TF-IDF), membership metrics.
+- **Representative papers/documents for the cluster**: Top-ranked papers closest to cluster centroid.
+- **Representative keywords/topics**: Top c-TF-IDF / KeyBERT keywords and scores.
+- **Closest semantically related papers**: k-nearest neighbors ranked by embedding cosine similarity.
+- **More distant papers or clusters**: Ranked distance metrics across the corpus.
+- **Related clusters & topic overlap**: Inter-cluster centroid cosine similarity and shared term overlap.
+- **Citation relationships**: Direct citation edges, citation counts, and referenced papers where available.
 - **Non-Mutating**: Inspecting evidence must NOT automatically mutate the corpus, clustering, or layout.
-- **No Unnecessary LLM Dependencies**: Explanations must be derived directly from measurable metrics. If an LLM is ever used for synthesis, it must only summarize already-grounded evidence and must never invent evidence.
-- **Seamless UX**: Integrates naturally with the existing Parallax canvas, document sidebar, and PDF viewer.
+- **Seamless UX**: Integrates transparently with the existing Parallax canvas, document sidebar, and PDF viewer.
 
 ---
 

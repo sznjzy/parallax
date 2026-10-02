@@ -90,6 +90,24 @@ Architectural guarantees:
 3. **Dynamic Topic Reactivity**: Topics and representative keywords automatically recalculate whenever cluster membership changes (incremental PDF additions or manual drag-and-drop constraints).
 4. **Outlier Noise Preservation**: Noise documents (`noise-*`) receive dedicated outlier metadata (`Outlier (<filename>)`) and are never conflated with real semantic topics.
 
+## ADR-009 — Phase 10 Zero-LLM Architecture
+
+Status: ACCEPTED
+
+The Research Evidence Explorer is intentionally implemented with zero LLM dependencies.
+
+Rationale:
+
+* improves reproducibility
+* improves explainability
+* eliminates hallucination risk
+* removes external API dependency
+* reduces runtime cost
+* makes evaluation easier
+* keeps the feature academically defensible
+
+All evidence must originate from measurable signals already available in the Parallax system.
+
 ## Future Decisions
 
 Add new ADRs below as major architectural decisions are made.
