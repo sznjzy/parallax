@@ -97,7 +97,7 @@ parallax/
 
 ### 5. Layout Physics Simulation
 - **Canvas Size**: 400×300 coordinate space.
-- **Cluster Anchors**: `compute_home_positions()` maps cluster UUIDs to angular positions on an inner orbit ($r = \min(W,H) \times 0.34$) via SHA-256 integer hashes, relaxed via 1D angular collision resolution (minimum angular separation 35°).
+- **Cluster Anchors**: `compute_home_positions()` maps cluster UUIDs to angular positions on an inner orbit ($r = \min(W,H) \times 0.34$) via SHA-256 integer hashes, relaxed via pairwise shortest-arc circular relaxation (enforcing minimum angular separation $\ge 35^\circ$, bounded by $(2\pi/N) \times 0.95$ for large $N$).
 - **Simulation**: Force-directed Euler integration with:
   - Intra-cluster repulsion ($k=4000$) and inter-cluster repulsion ($k=12000$).
   - Spring attraction ($k=0.5$) toward cluster home positions (split proportionally for boundary documents).
@@ -137,3 +137,4 @@ parallax/
 
 - **Phase 0 (2026-10-02)**: Complete baseline audit performed and documented. System structure, data flow, physics layout, and constraint pipeline audited against source code.
 - **Phase 1 (2026-10-02)**: Implemented true constraint-aware clustering pipeline (`run_constraint_aware_clustering()`), separating constrained documents before HDBSCAN execution, merging forced assignments, computing global centroids and boundaries, and adding dedicated test suite `test_constraint_aware_clustering.py`.
+- **Phase 2 (2026-10-02)**: Verified and hardened stable cluster UUID lineage across incremental updates with full state persistence, fixed cyclic angular relaxation in `compute_home_positions()` using pairwise shortest-arc resolution, and added dedicated test suite `test_stable_identity_and_layout.py`.

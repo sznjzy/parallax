@@ -89,26 +89,31 @@ def compute_home_positions(
     elif len(real_clusters) > 1:
         n = len(real_clusters)
         angles = [_angle_for(c) for c in real_clusters]
-        # Hard floor: no two cluster homes may be closer than 35° (≈ 0.611 rad),
-        # regardless of N.  This prevents visual collision when hash angles happen
-        # to cluster near each other.
-        MIN_SEP_HARD = math.radians(35.0)   # 35° hard lower bound
-        min_sep = max(MIN_SEP_HARD, (2.0 * math.pi / n) * 0.75)
+        # Hard floor: prefer 35° separation, but clamp to geometrically satisfiable bound for large N
+        MIN_SEP_HARD = math.radians(35.0)   # 35° target
+        max_possible_sep = (2.0 * math.pi / n) * 0.95
+        min_sep = min(max(MIN_SEP_HARD, (2.0 * math.pi / n) * 0.75), max_possible_sep)
 
-        # 1D angular relaxation — 200 iterations to guarantee convergence
-        # even when N clusters are tightly packed by their hash-derived angles.
+        # Pairwise shortest-arc circular relaxation
         for _ in range(200):
-            changed = False
+            max_violation = 0.0
             for i in range(n):
-                j = (i + 1) % n
-                diff = (angles[j] - angles[i]) % (2.0 * math.pi)
-                if diff < min_sep:
-                    push = (min_sep - diff) / 2.0
-                    angles[i] = (angles[i] - push) % (2.0 * math.pi)
-                    angles[j] = (angles[j] + push) % (2.0 * math.pi)
-                    changed = True
-            if not changed:
-                break  # Converged early
+                for j in range(i + 1, n):
+                    # Shortest angular displacement from angles[i] to angles[j] in [-π, π]
+                    delta = (angles[j] - angles[i] + math.pi) % (2.0 * math.pi) - math.pi
+                    dist = abs(delta)
+                    if dist < min_sep:
+                        violation = min_sep - dist
+                        max_violation = max(max_violation, violation)
+                        push = violation / 2.0
+                        if delta >= 0:
+                            angles[i] = (angles[i] - push) % (2.0 * math.pi)
+                            angles[j] = (angles[j] + push) % (2.0 * math.pi)
+                        else:
+                            angles[i] = (angles[i] + push) % (2.0 * math.pi)
+                            angles[j] = (angles[j] - push) % (2.0 * math.pi)
+            if max_violation < 1e-4:
+                break  # Converged cleanly
 
         for cid, angle in zip(real_clusters, angles):
             positions[cid] = (

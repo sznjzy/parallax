@@ -478,6 +478,20 @@ def run_constraint_aware_clustering(
         num_constraints_violated=violated,
     )
 
+    # Persist updated complete cluster mapping if state_file provided
+    if state_file:
+        final_state: dict[str, list[str]] = {}
+        for i, doc in enumerate(docs):
+            cid = doc_cluster_ids[i]
+            if not cid.startswith("noise-"):
+                final_state.setdefault(cid, []).append(doc["id"])
+        try:
+            Path(state_file).parent.mkdir(parents=True, exist_ok=True)
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(final_state, f, indent=2)
+        except Exception as exc:
+            logger.warning("Could not persist cluster_mapping state: %s", exc)
+
     return {
         "doc_cluster_ids": doc_cluster_ids,
         "boundary_flags": boundary_flags,
