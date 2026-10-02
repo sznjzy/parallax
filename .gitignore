@@ -18,6 +18,19 @@ dist/
 
 # Project-specific runtime state
 backend/api/cluster_mapping.json
+data/embedding_cache/
+data/sample_docs_debug/
+data/sample_docs_temp/
+
+# Test output and scratch scripts
+scratch_*.js
+scratch_*.py
+evidence*.txt
+output_*.txt
+test_*_output.txt
+test9_real_output.txt
+response*.json
+print_res.py
 
 # Environment secrets (if you add any API keys later)
 .env

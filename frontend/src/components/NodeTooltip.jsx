@@ -44,7 +44,7 @@ export default function NodeTooltip({ node, screenX, screenY, isPinned }) {
     <div
       ref={ref}
       className="node-tooltip"
-      style={{ left: pos.x, top: pos.y }}
+      style={{ left: pos.x, top: pos.y, pointerEvents: 'none', userSelect: 'none' }}
       role="tooltip"
       aria-label={`Details for ${docLabel}`}
     >

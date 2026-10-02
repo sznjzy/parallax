@@ -40,12 +40,18 @@ export default function ResearchCanvas({ onConstraintAdded }) {
   const { addConstraint } = useConstraints()
   const containerRef = useRef(null)
   const stageRef = useRef(null)
+  const nodeLayerRef = useRef(null)
   const { width: containerW, height: containerH } = useCanvasSize(containerRef)
 
-  // ── Coordinate mapping ─────────────────────────────────────────────
-  const baseScale = Math.min(containerW / LOGICAL_W, containerH / LOGICAL_H)
+  // ── Coordinate mapping with margin insets ─────────────────────────
+  const PADDING_TOP = 28
+  const PADDING_BOTTOM = 88  // Space for SelectedNodeBar at bottom
+  const PADDING_SIDE = 48
+  const availW = Math.max(100, containerW - PADDING_SIDE * 2)
+  const availH = Math.max(100, containerH - (PADDING_TOP + PADDING_BOTTOM))
+  const baseScale = Math.min(availW / LOGICAL_W, availH / LOGICAL_H)
   const offsetX = (containerW - LOGICAL_W * baseScale) / 2
-  const offsetY = (containerH - LOGICAL_H * baseScale) / 2
+  const offsetY = PADDING_TOP + (availH - LOGICAL_H * baseScale) / 2
 
   // ── Stage transform state (pan + zoom) ────────────────────────────
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
@@ -61,6 +67,17 @@ export default function ResearchCanvas({ onConstraintAdded }) {
       setStageScale(1.0)
     }
   }, [state.nodes])
+
+  // Synchronize Konva hit buffers on dimension / transform changes
+  useEffect(() => {
+    if (stageRef.current) {
+      stageRef.current.batchDraw()
+    }
+    if (nodeLayerRef.current) {
+      nodeLayerRef.current.batchDraw()
+      nodeLayerRef.current.drawHit()
+    }
+  }, [containerW, containerH, baseScale, stageScale, stagePos, state.nodes])
 
   // Custom events for reset zoom & export
   useEffect(() => {
@@ -287,12 +304,16 @@ export default function ResearchCanvas({ onConstraintAdded }) {
           scaleX={stageScale}
           scaleY={stageScale}
           draggable
-          onDragEnd={e => setStagePos({ x: e.target.x() - offsetX * stageScale, y: e.target.y() - offsetY * stageScale })}
+          onDragEnd={e => {
+            if (e.target === stageRef.current || e.target === e.target.getStage()) {
+              setStagePos({ x: e.target.x() - offsetX * stageScale, y: e.target.y() - offsetY * stageScale })
+            }
+          }}
           onWheel={handleWheel}
           onClick={e => { if (e.target === e.target.getStage()) dispatch({ type: 'SELECT_NODE', doc_id: null }) }}
         >
-          {/* Background layer: cluster convex hull regions */}
-          <Layer>
+          {/* Background layer: cluster convex hull regions (non-interactive to avoid event capture) */}
+          <Layer listening={false}>
             {uniqueClusterIds.map(cid => (
               <ClusterRegion
                 key={cid}
@@ -306,7 +327,7 @@ export default function ResearchCanvas({ onConstraintAdded }) {
           </Layer>
 
           {/* Foreground layer: document nodes */}
-          <Layer>
+          <Layer ref={nodeLayerRef} listening={true}>
             {state.nodes.map(node => (
               <DocumentNode
                 key={node.doc_id}

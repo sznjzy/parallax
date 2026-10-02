@@ -33,8 +33,8 @@ import { clusterColor } from './clusterColor'
 
 const BASE_RADIUS    = 12
 const BOUNDARY_OUTER = 17
-const HOVER_SCALE    = 1.15
-const DRAG_SCALE     = 1.25
+const HOVER_SCALE    = 1.05
+const DRAG_SCALE     = 1.18
 
 /** Truncate filename: "doc-paper1.pdf" → "paper1" */
 function shortLabel(doc_id) {
@@ -59,6 +59,8 @@ export default function DocumentNode({
   const [hovered, setHovered]   = useState(false)
   const [dragging, setDragging] = useState(false)
   const groupRef = useRef(null)
+  // Manual dblclick detection — bypasses Konva hit-buffer race after SELECT_NODE re-render
+  const lastClickTimeRef = useRef(0)
 
   const px = node.x * scale
   const py = node.y * scale
@@ -75,15 +77,41 @@ export default function DocumentNode({
   const shadowColor = nodeColor
   const curScale    = dragging ? DRAG_SCALE : hovered ? HOVER_SCALE : 1.0
 
-  // Sync position with props via smooth tween if not actively dragging
+  const isFirstRenderRef = useRef(true)
+  const prevPosRef = useRef({ x: px, y: py })
+
+  // Sync position with props via smooth tween only on subsequent updates (skip initial mount to avoid hit-canvas desync)
   useEffect(() => {
     if (groupRef.current && !dragging) {
-      groupRef.current.to({
-        x: px,
-        y: py,
-        duration: 0.28,
-        easing: Konva.Easings.EaseOut,
-      })
+      if (isFirstRenderRef.current) {
+        isFirstRenderRef.current = false
+        groupRef.current.position({ x: px, y: py })
+        prevPosRef.current = { x: px, y: py }
+        const layer = groupRef.current.getLayer()
+        if (layer) {
+          layer.batchDraw()
+          layer.drawHit()
+        }
+        return
+      }
+
+      const prev = prevPosRef.current
+      if (Math.abs(prev.x - px) > 0.5 || Math.abs(prev.y - py) > 0.5) {
+        groupRef.current.to({
+          x: px,
+          y: py,
+          duration: 0.28,
+          easing: Konva.Easings.EaseOut,
+          onFinish: () => {
+            const layer = groupRef.current?.getLayer()
+            if (layer) {
+              layer.batchDraw()
+              layer.drawHit()
+            }
+          }
+        })
+        prevPosRef.current = { x: px, y: py }
+      }
     }
   }, [px, py, dragging])
 
@@ -96,7 +124,15 @@ export default function DocumentNode({
       scaleX={curScale}
       scaleY={curScale}
       draggable
+      dragDistance={8}
+      onMouseDown={e => {
+        e.cancelBubble = true
+      }}
+      onTouchStart={e => {
+        e.cancelBubble = true
+      }}
       onMouseEnter={e => {
+        e.cancelBubble = true
         setHovered(true)
         e.target.getStage().container().style.cursor = 'grab'
         if (onHover) {
@@ -104,25 +140,63 @@ export default function DocumentNode({
         }
       }}
       onMouseLeave={e => {
+        e.cancelBubble = true
         setHovered(false)
         e.target.getStage().container().style.cursor = 'default'
         if (onHover) onHover(null, 0, 0)
       }}
       onMouseMove={e => {
-        if (onHover && hovered) {
+        e.cancelBubble = true
+        if (onHover) {
           onHover(node, e.evt.clientX, e.evt.clientY)
         }
       }}
-      onClick={() => onSelect && onSelect(node.doc_id)}
-      onTap={() => onSelect && onSelect(node.doc_id)}
-      onDblClick={() => onOpenPdf && onOpenPdf(node.doc_id)}
-      onDblTap={() => onOpenPdf && onOpenPdf(node.doc_id)}
+      onClick={e => {
+        e.cancelBubble = true
+        const now = Date.now()
+        const delta = now - lastClickTimeRef.current
+        if (delta < 450) {
+          // Two clicks within 450 ms on the same node → open PDF
+          lastClickTimeRef.current = 0
+          if (onOpenPdf) onOpenPdf(node.doc_id)
+        } else {
+          // First click → select node
+          lastClickTimeRef.current = now
+          if (onSelect) onSelect(node.doc_id)
+        }
+      }}
+      onTap={e => {
+        e.cancelBubble = true
+        const now = Date.now()
+        const delta = now - lastClickTimeRef.current
+        if (delta < 450) {
+          lastClickTimeRef.current = 0
+          if (onOpenPdf) onOpenPdf(node.doc_id)
+        } else {
+          lastClickTimeRef.current = now
+          if (onSelect) onSelect(node.doc_id)
+        }
+      }}
+      onDblClick={e => {
+        // Native fallback — reset timer to avoid triple-click issues
+        e.cancelBubble = true
+        lastClickTimeRef.current = 0
+        if (onOpenPdf) onOpenPdf(node.doc_id)
+      }}
+      onDblTap={e => {
+        e.cancelBubble = true
+        lastClickTimeRef.current = 0
+        if (onOpenPdf) onOpenPdf(node.doc_id)
+      }}
       onDragStart={e => {
+        e.cancelBubble = true
         setDragging(true)
+        lastClickTimeRef.current = 0   // reset dblclick timer — drag ≠ click
         e.target.getStage().container().style.cursor = 'grabbing'
         if (groupRef.current) groupRef.current.moveToTop()
       }}
       onDragMove={e => {
+        e.cancelBubble = true
         if (onDragMove) {
           const logX = e.target.x() / scale
           const logY = e.target.y() / scale
@@ -130,6 +204,7 @@ export default function DocumentNode({
         }
       }}
       onDragEnd={e => {
+        e.cancelBubble = true
         setDragging(false)
         e.target.getStage().container().style.cursor = 'grab'
         const logX = e.target.x() / scale
@@ -145,6 +220,13 @@ export default function DocumentNode({
                 y: py,
                 duration: 0.25,
                 easing: Konva.Easings.EaseInOut,
+                onFinish: () => {
+                  const layer = groupRef.current?.getLayer()
+                  if (layer) {
+                    layer.batchDraw()
+                    layer.drawHit()
+                  }
+                }
               })
             }
           })
@@ -160,6 +242,7 @@ export default function DocumentNode({
           strokeWidth={1}
           dash={[3, 3]}
           opacity={0.65}
+          listening={false}
         />
       )}
 
@@ -171,10 +254,11 @@ export default function DocumentNode({
           fill={nodeColor}
           opacity={0.35}
           dash={[4, 3]}
+          listening={false}
         />
       )}
 
-      {/* Main filled circle */}
+      {/* Main filled circle — precise primary hit target */}
       <Circle
         radius={BASE_RADIUS}
         fill={nodeColor}
@@ -183,6 +267,7 @@ export default function DocumentNode({
         shadowOpacity={0.7}
         shadowOffsetX={0}
         shadowOffsetY={dragging ? 4 : 0}
+        listening={true}
       />
 
       {/* Selected ring */}
@@ -193,6 +278,7 @@ export default function DocumentNode({
           strokeWidth={1.8}
           fill="transparent"
           opacity={0.9}
+          listening={false}
         />
       )}
 
@@ -234,6 +320,17 @@ export default function DocumentNode({
         </Group>
       )}
 
+      {/* Unified node + label hit target */}
+      <Rect
+        x={-18}
+        y={-BASE_RADIUS - 2}
+        width={36}
+        height={BASE_RADIUS * 2 + 18}
+        fill="rgba(0,0,0,0.001)"
+        cornerRadius={8}
+        listening={true}
+      />
+
       {/* Label */}
       <Text
         text={shortLabel(node.doc_id)}
@@ -245,7 +342,7 @@ export default function DocumentNode({
         width={70}
         x={-35}
         y={BASE_RADIUS + 3}
-        listening={false}
+        listening={true}
       />
     </Group>
   )

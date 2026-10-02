@@ -73,20 +73,40 @@ def compute_home_positions(
         fraction = raw / (2 ** 64)
         return fraction * 2.0 * math.pi
 
-    n = len(cluster_ids)
+    real_clusters = [cid for cid in cluster_ids if not cid.startswith("noise-")]
+    noise_clusters = [cid for cid in cluster_ids if cid.startswith("noise-")]
 
-    if n == 1:
-        return {cluster_ids[0]: (cx, cy)}
-
-    radius = min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.35
+    radius_inner = min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.34
+    radius_outer = min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.46
 
     positions: dict[str, tuple[float, float]] = {}
-    for cid in cluster_ids:
-        angle = _angle_for(cid)
-        positions[cid] = (
-            cx + radius * math.cos(angle),
-            cy + radius * math.sin(angle),
+
+    if len(real_clusters) == 1:
+        positions[real_clusters[0]] = (cx, cy)
+    else:
+        for cid in real_clusters:
+            angle = _angle_for(cid)
+            positions[cid] = (
+                cx + radius_inner * math.cos(angle),
+                cy + radius_inner * math.sin(angle),
+            )
+
+    real_angles = [_angle_for(cid) for cid in real_clusters] if len(real_clusters) > 1 else []
+
+    for nid in noise_clusters:
+        angle = _angle_for(nid)
+        # Avoid collinearity: offset noise anchor if it aligns closely with any real cluster angle
+        for ra in real_angles:
+            diff = abs((angle - ra + math.pi) % (2.0 * math.pi) - math.pi)
+            if diff < 0.35:
+                # Shift away into angular gap
+                shift = 0.40 if ((angle - ra + 2.0 * math.pi) % (2.0 * math.pi)) < math.pi else -0.40
+                angle = (ra + shift) % (2.0 * math.pi)
+        positions[nid] = (
+            cx + radius_outer * math.cos(angle),
+            cy + radius_outer * math.sin(angle),
         )
+
     return positions
 
 
@@ -156,6 +176,7 @@ def simulate(
         fx = np.zeros(n)
         fy = np.zeros(n)
 
+        # Node-to-node repulsion
         for i in range(n):
             for j in range(i + 1, n):
                 dx = nodes[i].x - nodes[j].x
@@ -176,8 +197,10 @@ def simulate(
         cy_canvas = CANVAS_HEIGHT / 2.0
         
         for i, node in enumerate(nodes):
+            is_noise = node.cluster_id.startswith("noise-")
+
             if cluster_home_positions is not None:
-                c_primary = cluster_home_positions[node.cluster_id]
+                c_primary = cluster_home_positions.get(node.cluster_id, (cx_canvas, cy_canvas))
             else:
                 c_primary = centroids[node.cluster_id]
                 
@@ -185,6 +208,7 @@ def simulate(
             dy_p = c_primary[1] - node.y
             primary_weight = 1.0 - node.secondary_weight if node.is_boundary_document else 1.0
 
+            # Spring attraction to home / centroid
             fx[i] += ATTRACTION_K * dx_p * primary_weight
             fy[i] += ATTRACTION_K * dy_p * primary_weight
 
@@ -200,11 +224,28 @@ def simulate(
                         fx[i] += ATTRACTION_K * (c_sec[0] - node.x) * node.secondary_weight
                         fy[i] += ATTRACTION_K * (c_sec[1] - node.y) * node.secondary_weight
 
-            if not node.is_anchored:
+            # Repel noise outliers away from real cluster centroids
+            if is_noise:
+                for cid, centroid in centroids.items():
+                    if not cid.startswith("noise-"):
+                        cdx = node.x - centroid[0]
+                        cdy = node.y - centroid[1]
+                        cdist_sq = cdx * cdx + cdy * cdy + 1e-4
+                        cdist = math.sqrt(cdist_sq)
+                        if cdist < 45.0:
+                            rep_f = 4000.0 / cdist_sq
+                            fx[i] += rep_f * (cdx / cdist)
+                            fy[i] += rep_f * (cdy / cdist)
+
+            # Center gravity: pull non-anchored cluster members inward, but exclude noise outliers
+            # so they stay around the peripheral orbit without getting pulled through clusters
+            if not node.is_anchored and not is_noise:
                 fx[i] += GRAVITY_K * (cx_canvas - node.x)
                 fy[i] += GRAVITY_K * (cy_canvas - node.y)
 
         total_energy = 0.0
+        MARGIN_X = 24.0
+        MARGIN_Y = 24.0
         for i, node in enumerate(nodes):
             node.velocity_x = (node.velocity_x + fx[i] * DT) * DAMPING
             node.velocity_y = (node.velocity_y + fy[i] * DT) * DAMPING
@@ -215,6 +256,11 @@ def simulate(
 
             node.x += node.velocity_x * DT
             node.y += node.velocity_y * DT
+
+            # Clamp coordinates within safe canvas bounding box to prevent boundary escape
+            node.x = max(MARGIN_X, min(CANVAS_WIDTH - MARGIN_X, node.x))
+            node.y = max(MARGIN_Y, min(CANVAS_HEIGHT - MARGIN_Y, node.y))
+
             total_energy += node.velocity_x ** 2 + node.velocity_y ** 2
 
         final_energy = total_energy

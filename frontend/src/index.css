@@ -431,19 +431,24 @@ body {
   flex-direction: column;
   gap: 8px;
   z-index: 50;
+  /* Pass clicks through to Konva canvas; only the buttons themselves catch events */
+  pointer-events: none;
+}
+.canvas-controls button,
+.canvas-controls a {
+  pointer-events: auto;
 }
 
 /* ---- Toast ----------------------------------------------- */
 .toast-container {
   position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 64px;
+  right: 24px;
   z-index: 200;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-items: center;
+  align-items: flex-end;
   pointer-events: none;
 }
 
@@ -458,7 +463,7 @@ body {
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-lg);
   font-size: var(--text-sm);
-  pointer-events: all;
+  pointer-events: auto;
   animation: toast-in var(--transition-base) ease forwards;
 }
 
@@ -476,9 +481,15 @@ body {
   padding: 10px 12px;
   font-size: var(--text-sm);
   box-shadow: var(--shadow-lg);
-  pointer-events: none;
+  pointer-events: none !important;
+  user-select: none !important;
   min-width: 200px;
   max-width: 280px;
+}
+
+.node-tooltip * {
+  pointer-events: none !important;
+  user-select: none !important;
 }
 
 .tooltip-filename {
@@ -754,6 +765,12 @@ body {
   z-index: 30;
   animation: slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   max-width: 90%;
+  /* Pass clicks through to Konva canvas; only buttons/links catch events */
+  pointer-events: none;
+}
+.selected-node-bar button,
+.selected-node-bar a {
+  pointer-events: auto;
 }
 
 @keyframes slide-up {

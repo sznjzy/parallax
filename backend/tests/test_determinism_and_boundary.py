@@ -147,7 +147,7 @@ def test_boundary_edge_case():
     ])
     labels = np.array([0, 2, 0, 0])
 
-    flags = compute_boundary_flags(embeddings, labels, centers)
+    flags = [f[0] for f in compute_boundary_flags(embeddings, labels, centers)]
 
     ok = True
 
@@ -161,9 +161,6 @@ def test_boundary_edge_case():
 
     # doc_c: assigned 0, angle 88°. Top-2 by cosine: cluster 1 (cos 2°≈1.0), cluster 0 (cos 88°≈0.035)
     # gap = 1.0 - 0.035 ≈ 0.965 >> 0.05 → not boundary
-    # (assigned cluster 0 is in top-2 via position 1, so normal branch)
-    # Actually top-2 are: cluster 1 (sim≈0.9994) and cluster 0 (sim≈0.035).
-    # Assigned is cluster 0 (top2_idx=1 position in sorted), gap = 0.9994-0.035≈0.964 >> 0.05 → not boundary
     ok &= _check(flags[2] == False, "doc_c (angle 88°, assigned 0): not boundary (assigned in top-2, large gap)")
 
     # doc_edge: assigned 0, angle 182°. Cosine similarities:
@@ -177,11 +174,11 @@ def test_boundary_edge_case():
     ok &= _check(flags[3] == True, "doc_edge (angle 182°, assigned 0): IS boundary (edge-case branch fires)")
 
     # Also confirm it doesn't crash with only 1 cluster
-    flags_single = compute_boundary_flags(embeddings[:1], np.array([0]), {0: unit(0)})
+    flags_single = [f[0] for f in compute_boundary_flags(embeddings[:1], np.array([0]), {0: unit(0)})]
     ok &= _check(flags_single == [False], "single cluster -> no boundary flags (no crash)")
 
     # Confirm it doesn't crash with noise labels
-    flags_noise = compute_boundary_flags(embeddings[:2], np.array([-1, -1]), {})
+    flags_noise = [f[0] for f in compute_boundary_flags(embeddings[:2], np.array([-1, -1]), {})]
     ok &= _check(flags_noise == [False, False], "all noise labels -> no boundary flags (no crash)")
 
     return ok

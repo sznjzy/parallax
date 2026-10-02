@@ -70,10 +70,12 @@ function expandHull(hull, cx, cy, padding = PADDING) {
     const dx = p2.x - p1.x
     const dy = p2.y - p1.y
     const len = Math.hypot(dx, dy) || 1
-    const nx = (-dy / len) * padding
-    const ny = (dx / len) * padding
-    const ex = (dx / len) * padding
-    const ey = (dy / len) * padding
+    const latPad = Math.min(padding, 18)
+    const endPad = Math.min(padding, 16)
+    const nx = (-dy / len) * latPad
+    const ny = (dx / len) * latPad
+    const ex = (dx / len) * endPad
+    const ey = (dy / len) * endPad
 
     return [
       { x: p1.x - ex + nx, y: p1.y - ey + ny },
@@ -123,7 +125,7 @@ export default function ClusterRegion({ cluster_id, nodes, scale, isSelected, is
   if (pts.length === 1) {
     const r = 32
     return (
-      <Group>
+      <Group listening={false}>
         <Circle
           x={cx}
           y={cy}
@@ -156,7 +158,7 @@ export default function ClusterRegion({ cluster_id, nodes, scale, isSelected, is
   const minY = Math.min(...expanded.map(p => p.y))
 
   return (
-    <Group>
+    <Group listening={false}>
       {/* Smooth Hull Region Fill & Stroke */}
       <Line
         points={flatPoints}
