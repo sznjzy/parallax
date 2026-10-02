@@ -37,7 +37,8 @@ parallax/
 │       ├── test_constraint_impact.py           # Constraint satisfaction & reassignment impact
 │       ├── test_spatial_stability.py           # Force simulation energy convergence & margin clamping
 │       ├── test_api_endpoints.py               # FastAPI test client integration & constraint CRUD
-│       └── test_pdf_ingestion_and_caching.py   # PDF magic byte validation, hash deduplication, live caching, upload/delete API
+│       ├── test_pdf_ingestion_and_caching.py   # PDF magic byte validation, hash deduplication, live caching, upload/delete API
+│       └── test_outlier_spatial_isolation.py   # ADR-007 Outlier noise classification & convex hull spatial isolation
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx                  # Root UI layout, health checking, topbar
@@ -105,13 +106,14 @@ parallax/
 
 ### 5. Layout Physics Simulation
 - **Canvas Size**: 400×300 coordinate space.
-- **Cluster Anchors**: `compute_home_positions()` maps cluster UUIDs to angular positions on an inner orbit ($r = \min(W,H) \times 0.34$) via SHA-256 integer hashes, relaxed via pairwise shortest-arc circular relaxation (enforcing minimum angular separation $\ge 35^\circ$, bounded by $(2\pi/N) \times 0.95$ for large $N$).
+- **Cluster Anchors**: `compute_home_positions()` maps real cluster UUIDs to angular positions on an inner orbit ($r = \min(W,H) \times 0.34$) via SHA-256 integer hashes, relaxed via pairwise shortest-arc circular relaxation ($\ge 35^\circ$). Noise anchors (`noise-*`) are placed strictly on the outer periphery ($r = \min(W,H) \times 0.46$) at the angular gap bisectors (voids) between adjacent real clusters.
 - **Simulation**: Force-directed Euler integration with:
   - Intra-cluster repulsion ($k=4000$) and inter-cluster repulsion ($k=12000$).
   - Spring attraction ($k=0.5$) toward cluster home positions (split proportionally for boundary documents).
-  - Center gravity ($k=0.01$) for non-noise, unanchored nodes.
-  - Peripheral repulsive orbit ($r = \min(W,H) \times 0.46$) for noise outliers.
+  - Strong mutual repulsion ($k=8000$, $d < 65.0$) between noise outlier nodes and real cluster nodes.
+  - Center gravity ($k=0.01$) applied exclusively to non-noise cluster members, keeping noise documents on the outer perimeter.
   - Velocity damping ($0.85$), strong anchor damping ($0.05$ for manual user pins), and canvas margin clamping ($[24, W-24], [24, H-24]$).
+- **Post-Condition Clearance**: `ensure_outlier_hull_isolation()` geometrically tests noise node coordinates against all expanded cluster convex hulls ($P=24.0\text{px}$) and displaces any enclosed/overlapping outlier outward by a safety margin ($\ge 14.0\text{px}$).
 
 ## Frontend Architecture
 
@@ -149,3 +151,4 @@ parallax/
 - **Phase 2 (2026-10-02)**: Verified and hardened stable cluster UUID lineage across incremental updates with full state persistence, fixed cyclic angular relaxation in `compute_home_positions()` using pairwise shortest-arc resolution, and added dedicated test suite `test_stable_identity_and_layout.py`.
 - **Phase 3 (2026-10-02)**: Established comprehensive automated testing and evaluation foundation: modular synthetic corpus fixtures (`synthetic_corpora.py`), test suites for clustering quality, constraint impact, spatial stability, and API endpoints, and a unified test discovery runner `run_all_tests.py` covering 28 test cases with zero external runtime dependencies.
 - **Phase 4 (2026-10-02)**: Implemented production-grade PDF upload, validation, deduplication, text chunking, and immediate `.npy` disk caching in `backend/ingestion/ingest.py`, exposed `POST /api/documents/upload` and `DELETE /api/documents/{filename}`, added comprehensive test suite `test_pdf_ingestion_and_caching.py` (35/35 tests passing), and added frontend upload/delete controls in `EvaluationPanel.jsx`.
+- **Post-Phase 4 Correction (2026-10-03)**: Implemented outlier spatial isolation (ADR-007): angular gap bisector anchoring for noise clusters, strong mutual noise-cluster repulsion, gravity exclusion, and geometric convex hull clearance guarantee (`ensure_outlier_hull_isolation()`), adding regression suite `test_outlier_spatial_isolation.py` (39/39 tests passing).

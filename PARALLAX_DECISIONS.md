@@ -58,6 +58,18 @@ Status: ACCEPTED
 
 The Idea Ghost Node is non-mutating. Embedding a user idea must not automatically add it to the corpus or mutate clustering.
 
+## ADR-007 — Outlier and Noise Document Spatial Isolation
+
+Status: ACCEPTED
+
+Outlier / noise documents (`noise-*`) must retain their semantic noise classification and must not visually or spatially appear inside any cluster's visual region / expanded convex hull.
+
+Architectural guarantees:
+1. **Gap Bisector Anchoring**: Outlier home positions are deterministically assigned to the angular gap bisectors (voids) between adjacent real clusters on the outer periphery ($r = \min(W, H) \times 0.46$).
+2. **Mutual Repulsion**: Noise nodes experience strong mutual repulsion ($k=8000$) away from all real cluster members, and real cluster members avoid engulfing noise nodes.
+3. **Gravity Exclusion**: Non-noise cluster members receive inward center gravity ($k=0.01$), whereas noise nodes are strictly excluded from center gravity to maintain peripheral placement.
+4. **Geometric Hull Clearance Post-Condition**: `ensure_outlier_hull_isolation()` geometrically tests noise coordinates against all expanded cluster hulls ($P=24.0\text{px}$) and radially/tangentially displaces any enclosed node outside the visual hull boundary by a safety margin ($\ge 14.0\text{px}$).
+
 ## Future Decisions
 
 Add new ADRs below as major architectural decisions are made.
