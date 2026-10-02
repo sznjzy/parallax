@@ -26,6 +26,7 @@ import ClusterRegion from './ClusterRegion'
 import DocumentNode from './DocumentNode'
 import NodeTooltip from '../components/NodeTooltip'
 import SelectedNodeBar from '../components/SelectedNodeBar'
+import { registerClusters } from './clusterColor'
 
 // Logical canvas dimensions — must match physics.py CANVAS_WIDTH / CANVAS_HEIGHT
 const LOGICAL_W = 400
@@ -276,6 +277,15 @@ export default function ResearchCanvas({ onConstraintAdded }) {
     [...new Set(state.nodes.map(n => n.cluster_id))],
     [state.nodes]
   )
+
+  // Register all active clusters as a batch so every cluster gets a unique,
+  // collision-free palette colour.  Must run before the first render that
+  // consumes clusterColor() — hence the effect fires on uniqueClusterIds.
+  useEffect(() => {
+    if (uniqueClusterIds.length > 0) {
+      registerClusters(uniqueClusterIds)
+    }
+  }, [uniqueClusterIds])
 
   const constrainedDocIds = useMemo(() =>
     new Set(state.constraints.map(c => c.doc_id)),

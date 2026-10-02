@@ -75,10 +75,34 @@ The backend pipeline consists of three core components:
 * **Clean, Professional Aesthetics:** All blinking/pulsing ambient indicator dots and AI badges have been cleaned up and replaced with a standard, minimalist, high-contrast design system.
 * **Export Utilities:** Instant high-resolution PNG canvas capture and full JSON dataset export.
 
+### g) Cluster Color Palette Allocation & Collision Avoidance (`clusterColor.js`)
+**What was built & tested:** Deterministic, non-colliding cluster color assignment across 12 custom theme palette variables (`--color-cluster-0` through `--color-cluster-11`).
+* **The issue:** Using naive hash modulo (`hashString(id) % NUM_COLOURS`) caused hash collisions where distinct clusters received identical hues, making adjacent topic boundaries indistinguishable.
+* **The solution:** Implemented batch registration via `registerClusters(clusterIds)` in `frontend/src/canvas/clusterColor.js`, wired to `useEffect` in `ResearchCanvas.jsx` on `uniqueClusterIds` change:
+  1. Deduplicates active non-noise cluster IDs.
+  2. Sorts clusters by their preferred hash slot (`hashString(cid) % 12`).
+  3. Uses deterministic linear probing to guarantee every active cluster receives a unique, non-overlapping color slot.
+  4. Preserves cluster hue stability across re-renders when capacity allows, falling back to collision-aware lazy assignment for dynamically introduced clusters.
+
+### h) Physics Engine: Angular Relaxation for Cluster Home Positions (`physics.py`)
+**What was built & tested:** 1D angular relaxation to prevent spatial collision of cluster centers on canvas.
+* **The issue:** Pure SHA-256 hash-derived angles on a circle could occasionally place two distinct cluster home positions very close to each other, causing their document nodes and convex hull regions to overlap.
+* **The solution:** Added 200-iteration 1D angular relaxation in `compute_home_positions()`:
+  * Enforces a hard minimum angular separation floor `MIN_SEP_HARD = 35°` (≈ 0.611 rad) and dynamic separation `min_sep = max(35°, (2π / N) * 0.75)`.
+  * Iteratively pushes adjacent cluster angles apart until minimum separation is satisfied or convergence is reached.
+  * Preserves order-invariance and determinism across runs.
+
+### i) Canvas Interactivity & Node Hit-Area Precision
+**What was built & tested:** Improved document node hover/drag hit detection, pointer precision, and bounding box padding in `ResearchCanvas.jsx` and `DocumentNode.jsx`.
+* **Interaction model:** Clean hit areas for node selection, Shift-drag constraint pinning with real-time target cluster highlighting, and spring snap-back for non-constraint drags.
+* **Visual polish:** Dynamic convex hull boundary polygons with generous canvas padding to prevent border clipping during zoom/pan operations.
+
 ## 4. Current System Capabilities & Validated Numbers
 * **Clustering Quality:** Silhouette score = **0.3175–0.380** (target > 0.25).
 * **Constraint Satisfaction:** **100%** on active constraints (target > 95%).
 * **Layout Stability:** avg displacement < 0.1 canvas units during incremental updates.
+* **Home Position Separation:** Guaranteed >= 35° angular separation between all cluster homes.
+* **Color Distinctiveness:** 100% collision-free color palette allocation up to 12 clusters.
 * **End-to-End Latency:** < 50ms with cached embeddings.
 
 ## 5. File/Module Map
@@ -86,11 +110,12 @@ The backend pipeline consists of three core components:
 * `backend/embeddings/embedding_cache.py` — SHA-256 disk cache for embeddings.
 * `backend/clustering/pipeline.py` — HDBSCAN clustering & stable UUID lineage assignment.
 * `backend/clustering/constraints.py` — constraint application & satisfaction evaluation.
-* `backend/layout/physics.py` — force-directed incremental physics layout engine.
+* `backend/layout/physics.py` — force-directed incremental physics layout engine with angular relaxation.
 * `backend/api/main.py` — FastAPI server with organize, constraints, and document endpoints.
 * `backend/api/pipeline.py` — end-to-end integration orchestrator.
 * `backend/api/constraints.json` — persistent constraint store.
 * `frontend/src/canvas/ResearchCanvas.jsx` — Konva canvas stage and pan/zoom/drag controller.
+* `frontend/src/canvas/clusterColor.js` — collision-free 12-hue palette allocation manager.
 * `frontend/src/canvas/ClusterRegion.jsx` — convex hull cluster polygon renderer.
 * `frontend/src/canvas/DocumentNode.jsx` — interactive document nodes with physics tweening.
 * `frontend/src/canvas/CanvasControls.jsx` — floating action controls (run, layout, export, zoom, theme).

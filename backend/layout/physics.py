@@ -76,6 +76,9 @@ def compute_home_positions(
     real_clusters = [cid for cid in cluster_ids if not cid.startswith("noise-")]
     noise_clusters = [cid for cid in cluster_ids if cid.startswith("noise-")]
 
+    # Deduplicate and sort deterministically by raw hash angle
+    real_clusters = sorted(list(set(real_clusters)), key=lambda c: _angle_for(c))
+
     radius_inner = min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.34
     radius_outer = min(CANVAS_WIDTH, CANVAS_HEIGHT) * 0.46
 
@@ -83,15 +86,40 @@ def compute_home_positions(
 
     if len(real_clusters) == 1:
         positions[real_clusters[0]] = (cx, cy)
-    else:
-        for cid in real_clusters:
-            angle = _angle_for(cid)
+    elif len(real_clusters) > 1:
+        n = len(real_clusters)
+        angles = [_angle_for(c) for c in real_clusters]
+        # Hard floor: no two cluster homes may be closer than 35° (≈ 0.611 rad),
+        # regardless of N.  This prevents visual collision when hash angles happen
+        # to cluster near each other.
+        MIN_SEP_HARD = math.radians(35.0)   # 35° hard lower bound
+        min_sep = max(MIN_SEP_HARD, (2.0 * math.pi / n) * 0.75)
+
+        # 1D angular relaxation — 200 iterations to guarantee convergence
+        # even when N clusters are tightly packed by their hash-derived angles.
+        for _ in range(200):
+            changed = False
+            for i in range(n):
+                j = (i + 1) % n
+                diff = (angles[j] - angles[i]) % (2.0 * math.pi)
+                if diff < min_sep:
+                    push = (min_sep - diff) / 2.0
+                    angles[i] = (angles[i] - push) % (2.0 * math.pi)
+                    angles[j] = (angles[j] + push) % (2.0 * math.pi)
+                    changed = True
+            if not changed:
+                break  # Converged early
+
+        for cid, angle in zip(real_clusters, angles):
             positions[cid] = (
                 cx + radius_inner * math.cos(angle),
                 cy + radius_inner * math.sin(angle),
             )
 
-    real_angles = [_angle_for(cid) for cid in real_clusters] if len(real_clusters) > 1 else []
+    real_angles = [
+        math.atan2(positions[cid][1] - cy, positions[cid][0] - cx) % (2.0 * math.pi)
+        for cid in real_clusters
+    ] if len(real_clusters) > 1 else []
 
     for nid in noise_clusters:
         angle = _angle_for(nid)

@@ -1,6 +1,6 @@
 # Parallax — Persistent Semantic Research Canvas
 
-> **Status: Full-Stack Implementation Complete** — Backend clustering, incremental layout physics, persistent constraint satisfaction, embedding caching, interactive HTML5 canvas UI, in-browser PDF reader, and evaluation metrics are fully implemented and verified. See [PROGRESS.md](PROGRESS.md) for full technical details.
+> **Status: Full-Stack Implementation Complete** — Backend clustering, incremental layout physics with 1D angular relaxation, persistent constraint satisfaction, embedding caching, collision-free cluster palettes, interactive HTML5 canvas UI, in-browser PDF reader, and evaluation metrics are fully implemented and verified. See [PROGRESS.md](PROGRESS.md) for full technical details.
 
 ## What is Parallax?
 
@@ -23,7 +23,7 @@ parallax/
 │   │   └── embedding_cache.py  ← SHA-256 disk cache for instant reload
 │   ├── clustering/         HDBSCAN clustering & stable UUID assignments
 │   │   └── constraints.py      ← Constraint application & satisfaction math
-│   ├── layout/             Force-directed incremental layout physics engine
+│   ├── layout/             Force-directed incremental layout physics engine (with angular relaxation)
 │   ├── api/                FastAPI application & integration pipeline
 │   │   ├── main.py         → Live API endpoints (organize, constraints, documents)
 │   │   ├── pipeline.py     → End-to-end integration pipeline
@@ -31,7 +31,7 @@ parallax/
 │   └── tests/              Validation wrappers (clustering, layout, determinism)
 ├── frontend/
 │   ├── src/
-│   │   ├── canvas/         Interactive Konva canvas, Cluster regions, Document nodes, Controls
+│   │   ├── canvas/         Interactive Konva canvas, Cluster regions, Document nodes, Controls, clusterColor
 │   │   ├── components/     Evaluation panel, Selected node bar, PDF modal, Toast
 │   │   ├── hooks/          useOrganize, useConstraints, useDocuments, useCanvasSize
 │   │   ├── state/          Global AppContext & reducer
@@ -181,9 +181,9 @@ Returns a JSON **object** (not a bare array) with three keys:
   "evaluation": {
     "silhouette_score":            0.3175,
     "num_clusters":                5,
-    "constraint_satisfaction_rate": null,
-    "num_constraints_applied":     null,
-    "num_constraints_violated":    null
+    "constraint_satisfaction_rate": 1.0,
+    "num_constraints_applied":     2,
+    "num_constraints_violated":    0
   },
   "skipped_documents": [
     {"filename": "bad.pdf", "reason": "PDF parse failed or empty"}
@@ -192,7 +192,7 @@ Returns a JSON **object** (not a bare array) with three keys:
 ```
 
 - **`nodes`**: Combined incremental-layout + constrained-clustering output contract. Each node has the six layout fields plus `cluster_id` and `is_boundary_document` so the frontend can colour-code clusters without a second request.
-- **`evaluation`**: Clustering quality metrics for this run. `constraint_*` fields are `null` until manual-correction / constraint-storage is implemented — they will not show a fake `1.0`.
+- **`evaluation`**: Clustering quality metrics and persistent constraint satisfaction metrics (`constraint_satisfaction_rate`, `num_constraints_applied`, `num_constraints_violated`). Returns `null` for constraint metrics when no user constraints are active.
 - **`skipped_documents`**: PDFs that could not be parsed. Empty list means all PDFs were processed successfully.
 
 **Quick test via curl:**
