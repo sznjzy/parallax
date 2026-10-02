@@ -254,21 +254,31 @@ Provide an interpretable radar/visualization.
 
 ---
 
-# Phase 10 — Idea Ghost Node
+# Phase 10 — Research Evidence Explorer
 
-Allow the user to enter a research idea.
+The goal is to make Parallax explainable, rigorous, and academically useful by allowing users to select a paper, cluster, or candidate research frontier and inspect the underlying evidence behind it.
 
-Flow:
+The feature should provide, where the underlying data supports it:
 
-idea
-→ embedding
-→ compare against corpus
-→ position relative to semantic landscape
-→ show nearby topics
-→ show distant/weakly connected areas
-→ show candidate relationships
+- Why a paper belongs to its cluster
+- Representative papers/documents for the cluster
+- Representative keywords/topics
+- Closest semantically related papers
+- More distant papers or clusters
+- Related clusters
+- Citation relationships where available
+- Similarity scores where meaningful
+- Cluster-level evidence
+- Connections between related clusters
+- Ability to navigate back to the source paper/PDF
 
-The ghost node must not mutate the corpus or clustering automatically.
+### Important Requirements
+
+- **Evidence-Grounded**: All explanations must be grounded in measurable signals (embedding cosine similarity, representative keywords, cluster membership, document-to-cluster centroid distance, citation edges, topic overlap, cluster statistics).
+- **No Hallucinated Claims**: Do NOT fabricate explanations or make unsupported claims about why a paper belongs to a cluster. If an explanation cannot be established from available data, explicitly indicate that.
+- **Non-Mutating**: Inspecting evidence must NOT automatically mutate the corpus, clustering, or layout.
+- **No Unnecessary LLM Dependencies**: Explanations must be derived directly from measurable metrics. If an LLM is ever used for synthesis, it must only summarize already-grounded evidence and must never invent evidence.
+- **Seamless UX**: Integrates naturally with the existing Parallax canvas, document sidebar, and PDF viewer.
 
 ---
 
@@ -286,7 +296,7 @@ Polish:
 - topic UI
 - citation overlay
 - frontier radar
-- ghost node
+- evidence explorer
 - PDF viewer
 - constraint interactions
 - accessibility where practical
@@ -398,7 +408,7 @@ PDF upload
 → cluster lifecycle
 → citation overlay
 → frontier analysis
-→ ghost node
+→ research evidence explorer
 → frontend
 
 Verify no major regressions.

@@ -52,11 +52,17 @@ The system must use language such as:
 
 It must not claim to objectively discover the true research gap.
 
-## ADR-006 — Idea Ghost Node
+## ADR-006 — Research Evidence Explorer (Grounding & Explainability)
 
-Status: ACCEPTED
+Status: ACCEPTED (SUPERSEDES IDEA GHOST NODE)
 
-The Idea Ghost Node is non-mutating. Embedding a user idea must not automatically add it to the corpus or mutate clustering.
+To maximize scientific rigor and viva explainability, Parallax adopts a grounded Research Evidence Explorer instead of a synthetic idea ghost node.
+
+Architectural guarantees:
+1. **Evidence-Grounded**: Explanations for cluster membership, topic relationships, and candidate frontiers must be computed from measurable signals (cosine similarity, representative keywords, centroid distance, citation edges, topic overlap).
+2. **Non-Mutating**: Inspecting evidence behind a paper or cluster must not alter clustering, state, or layout.
+3. **Zero Fabrication**: The system must never fabricate or invent unsupported explanations. If a relationship cannot be verified from available metrics, the UI must explicitly state that.
+4. **No LLM Dependency**: Core explanations and metrics are computed deterministically without external LLM dependencies.
 
 ## ADR-007 — Outlier and Noise Document Spatial Isolation
 

@@ -32,12 +32,12 @@ Phase 5 implemented automatic topic modeling via c-TF-IDF and KeyBERT keyword ex
 | 2 | COMPLETE | 147da2d | Stable cluster identity and layout: UUID overlap lineage, pairwise circular relaxation, anchor damping |
 | 3 | COMPLETE | 22d8384 | Testing and evaluation foundation: synthetic corpora fixtures, modular test suites (quality, constraints, physics, API), unified runner |
 | 4 | COMPLETE | 56147f5 | PDF upload & ingestion hardening: magic bytes validation, deduplication, disk caching, upload/delete API & UI |
-| 5 | COMPLETE | pending | Automatic cluster topic modeling: c-TF-IDF, KeyBERT semantic centroid alignment, text disk cache, UI integration |
+| 5 | COMPLETE | 23c987e | Automatic cluster topic modeling: c-TF-IDF, KeyBERT semantic centroid alignment, text disk cache, UI integration |
 | 6 | NOT STARTED | — | Semantic search and canvas heatmap |
 | 7 | NOT STARTED | — | Cluster lifecycle management |
 | 8 | NOT STARTED | — | Citation network |
 | 9 | NOT STARTED | — | Semantic frontier / candidate gap radar |
-| 10 | NOT STARTED | — | Idea Ghost Node |
+| 10 | NOT STARTED | — | Research Evidence Explorer |
 | 11 | NOT STARTED | — | Frontend polish |
 | 12 | NOT STARTED | — | Performance and caching |
 | 13 | NOT STARTED | — | Complete evaluation |
