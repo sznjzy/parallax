@@ -4,7 +4,7 @@ This file records the actual implementation state of the Parallax repository.
 
 ## Current Phase
 
-Phase 5 — Cluster Topic Modeling (c-TF-IDF / KeyBERT)
+Phase 6 — Semantic Search + Canvas Heatmap
 
 ## Status
 
@@ -17,10 +17,11 @@ READY FOR APPROVAL
 - **Phase 2 — Stable Cluster Identity + Layout Correctness**: Verified and hardened stable cluster UUID tracking across incremental updates with full state persistence, fixed circular shortest-arc angular relaxation in `compute_home_positions()`, and verified deterministic spatial anchoring and force-directed simulation stability.
 - **Phase 3 — Testing + Evaluation Foundation**: Established synthetic corpora generators (`backend/tests/fixtures/synthetic_corpora.py`), comprehensive automated test suites for clustering quality, constraint impact, spatial stability, and API endpoints, and replaced legacy scratch test runners with a unified test discovery runner `run_all_tests.py` (28/28 unit tests passing).
 - **Phase 4 — PDF Ingestion + Caching Hardening**: Implemented robust PDF validation (magic byte `%PDF-` checks, size limits, filename sanitization/traversal defense), content-hash SHA-256 deduplication, automatic text chunking and immediate `.npy` disk caching in `backend/ingestion/ingest.py`, `POST /api/documents/upload` and `DELETE /api/documents/{filename}` endpoints, and connected UI file upload controls in `EvaluationPanel.jsx` (35/35 unit tests passing).
+- **Phase 5 — Automatic Cluster Topic Modeling**: Implemented Class-based TF-IDF (c-TF-IDF) in `backend/topics/topic_modeling.py` with optional KeyBERT semantic centroid alignment, academic stopword filtering, dynamic topic updating across constraint/corpus changes, text disk caching (`<hash>.txt`), and UI topic labels in `ClusterRegion.jsx` and `EvaluationPanel.jsx` (47/47 unit tests passing).
 
 ## Current Phase Notes
 
-Phase 4 established production-grade PDF upload, validation, deduplication, deletion, and immediate embedding caching. All 35 automated tests pass. Phase 5 will implement automated cluster topic modeling via c-TF-IDF / KeyBERT keyword extraction.
+Phase 5 implemented automatic topic modeling via c-TF-IDF and KeyBERT keyword extraction without LLM dependencies. All 47 automated tests pass. Phase 6 will implement semantic search and canvas heatmap highlighting.
 
 ## Phase History
 
@@ -31,7 +32,7 @@ Phase 4 established production-grade PDF upload, validation, deduplication, dele
 | 2 | COMPLETE | 147da2d | Stable cluster identity and layout: UUID overlap lineage, pairwise circular relaxation, anchor damping |
 | 3 | COMPLETE | 22d8384 | Testing and evaluation foundation: synthetic corpora fixtures, modular test suites (quality, constraints, physics, API), unified runner |
 | 4 | COMPLETE | 56147f5 | PDF upload & ingestion hardening: magic bytes validation, deduplication, disk caching, upload/delete API & UI |
-| 5 | NOT STARTED | — | Cluster topic modeling |
+| 5 | COMPLETE | pending | Automatic cluster topic modeling: c-TF-IDF, KeyBERT semantic centroid alignment, text disk cache, UI integration |
 | 6 | NOT STARTED | — | Semantic search and canvas heatmap |
 | 7 | NOT STARTED | — | Cluster lifecycle management |
 | 8 | NOT STARTED | — | Citation network |

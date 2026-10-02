@@ -98,6 +98,7 @@ def _run_analysis_only(pdf_folder: Path) -> dict:
     )
     from backend.clustering.pipeline import run_constraint_aware_clustering
     from backend.clustering.constraints import load_constraints
+    from backend.topics.topic_modeling import extract_cluster_topics
 
     model = _get_model()
     pdf_files = sorted(pdf_folder.glob("*.pdf"))
@@ -118,7 +119,7 @@ def _run_analysis_only(pdf_folder: Path) -> dict:
 
         doc_id = f"doc-{pdf_path.name}"
         canvas_vec, _ = embed_document_chunks(model, chunks)
-        docs_all.append({"id": doc_id, "filename": pdf_path.name})
+        docs_all.append({"id": doc_id, "filename": pdf_path.name, "text": text})
         embeddings_list.append(canvas_vec)
 
     if not docs_all:
@@ -136,10 +137,20 @@ def _run_analysis_only(pdf_folder: Path) -> dict:
     boundary_flags = clustering_res["boundary_flags"]
     evaluation = clustering_res["evaluation"]
 
+    # Extract cluster topics via c-TF-IDF / KeyBERT
+    topics = extract_cluster_topics(
+        docs=docs_all,
+        doc_cluster_ids=doc_cluster_ids,
+        cluster_centers=clustering_res.get("cluster_centers"),
+        model=model,
+        top_n=5,
+    )
+
     # Build per-cluster groupings for the UI
     cluster_groups: dict[str, dict] = {}
     for i, doc in enumerate(docs_all):
         cid = doc_cluster_ids[i]
+        orig_cid = cid
         if cid.startswith("noise-"):
             cid = "noise"
 
@@ -147,7 +158,15 @@ def _run_analysis_only(pdf_folder: Path) -> dict:
         is_boundary = bool(is_boundary_flag[0]) if isinstance(is_boundary_flag, (tuple, list)) else bool(is_boundary_flag)
 
         if cid not in cluster_groups:
-            cluster_groups[cid] = {"cluster_id": cid, "documents": [], "boundary_documents": []}
+            t_info = topics.get(orig_cid, {})
+            cluster_groups[cid] = {
+                "cluster_id": cid,
+                "topic_label": t_info.get("topic_label", "Outliers" if cid == "noise" else f"Topic {cid[:6]}"),
+                "keywords": t_info.get("keywords", []),
+                "top_terms": t_info.get("top_terms", []),
+                "documents": [],
+                "boundary_documents": [],
+            }
 
         entry = {"doc_id": doc["id"], "filename": doc["filename"]}
         if is_boundary:
@@ -167,6 +186,7 @@ def _run_analysis_only(pdf_folder: Path) -> dict:
 
     return {
         "clusters": list(cluster_groups.values()),
+        "topics": topics,
         "evaluation": eval_dict,
         "skipped_documents": skipped,
         "total_documents_processed": len(docs_all),

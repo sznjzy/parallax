@@ -59,9 +59,30 @@ def _cache_path(pdf_path: Path) -> Path:
     return _ensure_cache_dir() / f"{_cache_key(pdf_path)}.npy"
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+def _text_cache_path(pdf_path: Path) -> Path:
+    return _ensure_cache_dir() / f"{_cache_key(pdf_path)}.txt"
+
+
+def get_cached_text(pdf_path: Path) -> str | None:
+    """Load and return cached extracted text for *pdf_path*, or None if not cached."""
+    try:
+        p = _text_cache_path(pdf_path)
+        if p.exists():
+            return p.read_text(encoding="utf-8", errors="ignore")
+        return None
+    except Exception as exc:
+        logger.warning("Text cache read error for %s: %s", pdf_path.name, exc)
+        return None
+
+
+def save_cached_text(pdf_path: Path, text: str) -> None:
+    """Persist extracted text for *pdf_path*."""
+    try:
+        p = _text_cache_path(pdf_path)
+        p.write_text(text, encoding="utf-8", errors="ignore")
+    except Exception as exc:
+        logger.warning("Text cache write error for %s: %s", pdf_path.name, exc)
+
 
 def is_cached(pdf_path: Path) -> bool:
     """Return True if this PDF already has a cached embedding."""

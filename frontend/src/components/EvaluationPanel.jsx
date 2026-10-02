@@ -405,7 +405,7 @@ export default function EvaluationPanel() {
         )}
 
         {/* ── Legend ────────────────────────────────────────────── */}
-        <Legend nodes={state.nodes} />
+        <Legend nodes={state.nodes} topics={state.topics} />
       </div>
     </aside>
   )
@@ -501,42 +501,70 @@ function ConstraintRow({ constraint, onRemove, isInactive }) {
   )
 }
 
-function Legend({ nodes }) {
+function Legend({ nodes, topics }) {
   const clusters = [...new Set(nodes.filter(n => !n.cluster_id.startsWith('noise-')).map(n => n.cluster_id))]
   if (clusters.length === 0) return null
 
   return (
     <div className="glass-card">
-      <div className="glass-card-title">Clusters</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div className="glass-card-title">Clusters & Topics</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {clusters.map(cid => {
           const count = nodes.filter(n => n.cluster_id === cid).length
           const clr = clusterColor(cid)
-          const short = cid.replace('cluster-', '')
+          const short = cid.replace('cluster-', '').slice(0, 6)
+          const topicInfo = topics?.[cid]
+          const topicTitle = topicInfo?.topic_label || `Topic ${short}`
+          const topKeywords = topicInfo?.top_terms?.slice(0, 3).join(', ')
+
           return (
-            <div key={cid} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span
-                style={{
-                  fontSize: '0.65rem',
-                  padding: '1px 5px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: `${clr}18`,
-                  color: clr,
-                  border: `1px solid ${clr}40`,
-                  fontFamily: 'var(--font-mono)',
-                  minWidth: '22px',
-                  textAlign: 'center',
-                }}
-              >
-                {short}
-              </span>
-              <span className="truncate monospace" style={{ fontSize: 'var(--text-xs)', flex: 1 }}>{cid}</span>
-              <span className="badge badge-default" style={{ fontSize: '0.6rem', padding: '0 5px' }}>{count}</span>
+            <div key={cid} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '3px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span
+                  style={{
+                    fontSize: '0.65rem',
+                    padding: '1px 5px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: `${clr}18`,
+                    color: clr,
+                    border: `1px solid ${clr}40`,
+                    fontFamily: 'var(--font-mono)',
+                    minWidth: '22px',
+                    textAlign: 'center',
+                    flexShrink: 0,
+                  }}
+                  title={cid}
+                >
+                  {short}
+                </span>
+                <span
+                  className="truncate"
+                  style={{ fontSize: 'var(--text-xs)', fontWeight: 600, flex: 1, color: 'var(--color-text)' }}
+                  title={topicTitle}
+                >
+                  {topicTitle}
+                </span>
+                <span className="badge badge-default" style={{ fontSize: '0.6rem', padding: '0 5px' }}>{count}</span>
+              </div>
+              {topKeywords && (
+                <span
+                  className="truncate"
+                  style={{
+                    fontSize: '0.62rem',
+                    color: 'var(--color-text-subtle)',
+                    paddingLeft: 28,
+                    fontStyle: 'italic',
+                  }}
+                  title={topicInfo?.top_terms?.join(', ')}
+                >
+                  {topKeywords}
+                </span>
+              )}
             </div>
           )
         })}
         {nodes.filter(n => n.cluster_id.startsWith('noise-')).length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 4, borderTop: '1px solid var(--color-border)' }}>
             <span
               style={{
                 fontSize: '0.65rem',
@@ -550,7 +578,9 @@ function Legend({ nodes }) {
             >
               —
             </span>
-            <span className="truncate" style={{ fontSize: 'var(--text-xs)', flex: 1, color: 'var(--color-text-subtle)' }}>noise</span>
+            <span className="truncate" style={{ fontSize: 'var(--text-xs)', flex: 1, color: 'var(--color-text-subtle)' }}>
+              Outliers (isolated noise)
+            </span>
             <span className="badge badge-default" style={{ fontSize: '0.6rem', padding: '0 5px' }}>
               {nodes.filter(n => n.cluster_id.startsWith('noise-')).length}
             </span>

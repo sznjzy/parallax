@@ -27,6 +27,9 @@ parallax/
 │   │   └── ingest.py                # Safe PDF validation, deduplication, chunking, disk caching, deletion
 │   ├── layout/
 │   │   └── physics.py               # 2D force-directed simulation and deterministic angular anchors
+│   ├── topics/
+│   │   ├── __init__.py              # Topic modeling package marker
+│   │   └── topic_modeling.py        # c-TF-IDF, KeyBERT semantic centroid alignment, keyword extraction
 │   └── tests/
 │       ├── fixtures/
 │       │   ├── __init__.py          # Fixtures package marker
@@ -38,7 +41,8 @@ parallax/
 │       ├── test_spatial_stability.py           # Force simulation energy convergence & margin clamping
 │       ├── test_api_endpoints.py               # FastAPI test client integration & constraint CRUD
 │       ├── test_pdf_ingestion_and_caching.py   # PDF magic byte validation, hash deduplication, live caching, upload/delete API
-│       └── test_outlier_spatial_isolation.py   # ADR-007 Outlier noise classification & convex hull spatial isolation
+│       ├── test_outlier_spatial_isolation.py   # ADR-007 Outlier noise classification & convex hull spatial isolation
+│       └── test_topic_modeling.py              # ADR-008 c-TF-IDF, KeyBERT semantic alignment & dynamic updates
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx                  # Root UI layout, health checking, topbar
@@ -113,14 +117,19 @@ parallax/
   - Strong mutual repulsion ($k=8000$, $d < 65.0$) between noise outlier nodes and real cluster nodes.
   - Center gravity ($k=0.01$) applied exclusively to non-noise cluster members, keeping noise documents on the outer perimeter.
   - Velocity damping ($0.85$), strong anchor damping ($0.05$ for manual user pins), and canvas margin clamping ($[24, W-24], [24, H-24]$).
-- **Post-Condition Clearance**: `ensure_outlier_hull_isolation()` geometrically tests noise node coordinates against all expanded cluster convex hulls ($P=24.0\text{px}$) and displaces any enclosed/overlapping outlier outward by a safety margin ($\ge 14.0\text{px}$).
+### 6. Automatic Topic Modeling (c-TF-IDF + KeyBERT — ADR-008)
+- **Engine**: `backend.topics.topic_modeling` (`extract_cluster_topics()`, `compute_ctfidf()`).
+- **c-TF-IDF Formula**: $W_{c, t} = tf_{c, t} \times \log\left(1 + \frac{A}{f_t}\right)$, where $A$ is average words per cluster and $f_t$ is total term frequency across all clusters.
+- **KeyBERT Semantic Alignment**: Candidate keywords are re-ranked using a combined score (60% cosine similarity to normalized cluster centroid embedding + 40% c-TF-IDF uniqueness).
+- **Text Disk Cache**: Extracted document text is cached at `data/embedding_cache/<sha256>.txt` to ensure instantaneous topic recalculations on cached corpora.
+- **Dynamic Updates**: Topics, titles, and representative keywords automatically recalculate whenever cluster membership changes (incremental PDF additions or manual drag-and-drop constraints).
 
 ## Frontend Architecture
 
 - **Stack**: React 18 + Vite + Konva / react-konva + Lucide icons.
 - **Design System**: Vanilla CSS tokens in `frontend/src/index.css` (dark mode default, glassmorphism headers, responsive panel layouts).
 - **Canvas Viewport**: `ResearchCanvas.jsx` renders clustered document nodes with convex hulls / cluster boundaries, smooth dragging, real-time boundary rings, and manual cluster reassignment via drag-and-drop.
-- **Evaluation & Documents**: `EvaluationPanel.jsx` presents live clustering silhouette score, constraint satisfaction metrics, corpus document selection, and PDF reader modal triggers.
+- **Evaluation & Documents**: `EvaluationPanel.jsx` presents live clustering silhouette score, constraint satisfaction metrics, corpus document selection, cluster legend with topic titles and top keywords, and PDF reader modal triggers.
 
 ## Verified API Endpoints
 
@@ -128,7 +137,7 @@ parallax/
 |---|---|---|
 | GET | `/` | Liveness health check |
 | GET | `/api/status` | Readiness check (PDF count, dependency availability) |
-| POST | `/api/organize` | Execute embedding, clustering, physics layout pipeline |
+| POST | `/api/organize` | Execute embedding, clustering, physics layout, and topic modeling pipeline |
 | GET | `/api/documents` | List available PDFs in corpus with cache status |
 | POST | `/api/documents/upload` | Multi-PDF upload with validation, deduplication, and immediate caching |
 | DELETE | `/api/documents/{filename}` | Delete PDF from corpus with constraint and state pruning |
@@ -137,12 +146,12 @@ parallax/
 | POST | `/api/constraints` | Create or update user constraint (idempotent PUT) |
 | DELETE | `/api/constraints/{doc_id}` | Remove constraint for specific document |
 | DELETE | `/api/constraints` | Clear all user constraints |
-| POST | `/api/analyze` | Fast demo endpoint (clustering only, no physics layout) |
+| POST | `/api/analyze` | Fast demo endpoint with cluster topic modeling (no physics layout) |
 
 ## Known Limitations & Deviations Identified
 
-1. **Topic Modeling**: Cluster labeling is currently UUID-based without automated c-TF-IDF keyword extraction (scheduled for Phase 5).
-2. **Semantic Search**: Text search across cluster canvas vectors and chunk-level highlighting is scheduled for Phase 6.
+1. **Semantic Search**: Text search across cluster canvas vectors and chunk-level highlighting is scheduled for Phase 6.
+2. **Cluster Lifecycle**: Interactive cluster rename, merge, and split API endpoints are scheduled for Phase 7.
 
 ## Architecture Change Log
 
@@ -152,3 +161,4 @@ parallax/
 - **Phase 3 (2026-10-02)**: Established comprehensive automated testing and evaluation foundation: modular synthetic corpus fixtures (`synthetic_corpora.py`), test suites for clustering quality, constraint impact, spatial stability, and API endpoints, and a unified test discovery runner `run_all_tests.py` covering 28 test cases with zero external runtime dependencies.
 - **Phase 4 (2026-10-02)**: Implemented production-grade PDF upload, validation, deduplication, text chunking, and immediate `.npy` disk caching in `backend/ingestion/ingest.py`, exposed `POST /api/documents/upload` and `DELETE /api/documents/{filename}`, added comprehensive test suite `test_pdf_ingestion_and_caching.py` (35/35 tests passing), and added frontend upload/delete controls in `EvaluationPanel.jsx`.
 - **Post-Phase 4 Correction (2026-10-03)**: Implemented outlier spatial isolation (ADR-007): angular gap bisector anchoring for noise clusters, strong mutual noise-cluster repulsion, gravity exclusion, and geometric convex hull clearance guarantee (`ensure_outlier_hull_isolation()`), adding regression suite `test_outlier_spatial_isolation.py` (39/39 tests passing).
+- **Phase 5 (2026-10-03)**: Implemented automatic cluster topic modeling via Class-based TF-IDF (c-TF-IDF) and KeyBERT semantic centroid alignment in `backend/topics/topic_modeling.py`, added extracted text disk caching (`<sha256>.txt`), integrated topics into `run_pipeline()`, `/api/organize`, and `/api/analyze`, updated frontend `ClusterRegion.jsx` and `EvaluationPanel.jsx` to render dynamic topic titles and representative keywords, and added comprehensive test suite `test_topic_modeling.py` (47/47 tests passing).

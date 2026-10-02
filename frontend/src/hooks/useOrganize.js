@@ -63,6 +63,7 @@ export function useOrganize() {
       }
 
       dispatch({ type: 'SET_NODES', nodes: data.nodes ?? [] })
+      dispatch({ type: 'SET_TOPICS', topics: data.topics ?? {} })
       dispatch({ type: 'SET_EVALUATION', evaluation: data.evaluation ?? null })
       dispatch({ type: 'SET_SKIPPED', skipped: data.skipped_documents ?? [] })
       dispatch({ type: 'SET_STATUS', status: 'ready', message: null })

@@ -15,6 +15,7 @@
  */
 import React from 'react'
 import { Group, Line, Circle, Rect, Text } from 'react-konva'
+import { useApp } from '../state/AppContext'
 import { clusterColor } from './clusterColor'
 
 const PADDING = 24 // outward offset in px
@@ -102,6 +103,8 @@ function expandHull(hull, cx, cy, padding = PADDING) {
 }
 
 export default function ClusterRegion({ cluster_id, nodes, scale, isSelected, isDragTarget }) {
+  const { state } = useApp()
+
   // Skip noise pseudo-clusters
   if (cluster_id.startsWith('noise-')) return null
 
@@ -119,7 +122,9 @@ export default function ClusterRegion({ cluster_id, nodes, scale, isSelected, is
   const strokeWidth = isDragTarget ? 2.5 : isSelected ? 2 : 1.5
 
   const shortClusterLabel = cluster_id.replace(/^cluster-/, '').slice(0, 6)
-  const labelText = `Topic ${shortClusterLabel} · ${clusterNodes.length}`
+  const topicMeta = state?.topics?.[cluster_id]
+  const displayTitle = topicMeta?.topic_label || `Topic ${shortClusterLabel}`
+  const labelText = `${displayTitle} · ${clusterNodes.length}`
 
   // 1 Node special case: circle
   if (pts.length === 1) {

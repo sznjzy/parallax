@@ -30,6 +30,8 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react'
 const initialState = {
   /** List of canvas nodes returned by /api/organize */
   nodes: [],
+  /** Cluster topic models extracted by c-TF-IDF / KeyBERT */
+  topics: {},
   /** EvaluationContract from /api/organize */
   evaluation: null,
   /** PDFs the pipeline couldn't parse */
@@ -59,6 +61,9 @@ function reducer(state, action) {
   switch (action.type) {
     case 'SET_NODES':
       return { ...state, nodes: action.nodes }
+
+    case 'SET_TOPICS':
+      return { ...state, topics: action.topics }
 
     case 'SET_EVALUATION':
       return { ...state, evaluation: action.evaluation }

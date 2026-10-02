@@ -48,6 +48,8 @@ from backend.embeddings.embedding_cache import (
     get_cached_embedding,
     save_cached_embedding,
     is_cached,
+    get_cached_text,
+    save_cached_text,
 )
 
 from backend.clustering.pipeline import (
@@ -60,6 +62,7 @@ from backend.clustering.pipeline import (
     ClusteringOutput,
     EvaluationContract,
 )
+from backend.topics.topic_modeling import extract_cluster_topics
 from backend.clustering.constraints import (
     apply_constraints,
     evaluate_constraint_satisfaction,
@@ -221,7 +224,12 @@ def _ingest_corpus(
         # ── Try cache first ───────────────────────────────────────────
         cached_vec = get_cached_embedding(pdf_path)
         if cached_vec is not None:
-            docs_all.append({"id": doc_id, "filename": pdf_path.name})
+            cached_text = get_cached_text(pdf_path)
+            if cached_text is None:
+                cached_text = extract_text_from_pdf(pdf_path)
+                if cached_text:
+                    save_cached_text(pdf_path, cached_text)
+            docs_all.append({"id": doc_id, "filename": pdf_path.name, "text": cached_text or ""})
             embeddings_list.append(cached_vec)
             cached_count += 1
             logger.debug("Cache HIT  %s", pdf_path.name)
@@ -234,6 +242,7 @@ def _ingest_corpus(
             logger.warning("Skipping %s: no text extracted", pdf_path.name)
             continue
 
+        save_cached_text(pdf_path, text)
         chunks = chunk_text(text)
         if not chunks:
             skipped.append({"filename": pdf_path.name, "reason": "No text chunks after chunking"})
@@ -245,7 +254,7 @@ def _ingest_corpus(
         save_cached_embedding(pdf_path, canvas_vec)
         embed_count += 1
 
-        doc_dict = {"id": doc_id, "filename": pdf_path.name}
+        doc_dict = {"id": doc_id, "filename": pdf_path.name, "text": text}
         if is_live_api:
             # EmbeddingOutput typed contract
             doc_dict["embedding_output"] = EmbeddingOutput(
@@ -345,6 +354,16 @@ def run_pipeline(
 
     evaluation = clustering_res["evaluation"]
 
+    # --- AUTOMATIC CLUSTER TOPIC MODELING (Phase 5) ---
+    logger.info("Extracting cluster topics via c-TF-IDF / KeyBERT...")
+    topics = extract_cluster_topics(
+        docs=docs_all,
+        doc_cluster_ids=clustering_res["doc_cluster_ids"],
+        cluster_centers=clustering_res.get("cluster_centers"),
+        model=model,
+        top_n=5,
+    )
+
     # --- SERIALISE ---
     result_nodes = []
     for node in nodes:
@@ -373,6 +392,7 @@ def run_pipeline(
 
     return {
         "nodes": result_nodes,
+        "topics": topics,
         "evaluation": eval_dict,
         "skipped_documents": skipped,
     }

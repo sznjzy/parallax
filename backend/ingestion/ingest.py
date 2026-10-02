@@ -30,6 +30,7 @@ from backend.embeddings.embedding_cache import (
     save_cached_embedding,
     get_cached_embedding,
     is_cached,
+    save_cached_text,
 )
 from backend.clustering.constraints import remove_constraint
 
@@ -204,6 +205,8 @@ def save_and_ingest_pdf(
             "status": "error",
             "message": "PDF contains no extractable text or is password-protected/corrupted.",
         }
+
+    save_cached_text(target_path, text)
 
     chunks = chunk_text(text, max_words=400)
     if not chunks:
