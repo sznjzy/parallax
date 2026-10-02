@@ -1,17 +1,32 @@
-import subprocess
+"""
+Parallax Unified Test Suite Runner
+Discovers and runs all unit tests, integration tests, and quality benchmarks.
+"""
+import sys
+import unittest
 
-def run_cmd(cmd, header):
-    print(f"\n--- {header} ---")
-    try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        print(result.stdout)
-        if result.stderr:
-            print("STDERR:")
-            print(result.stderr)
-    except Exception as e:
-        print(f"Error: {e}")
+def main():
+    print("=" * 70)
+    print("PARALLAX UNIFIED TEST SUITE")
+    print("=" * 70)
+    
+    loader = unittest.TestLoader()
+    suite = loader.discover(start_dir="backend/tests", pattern="test_*.py")
+    
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+    
+    print("\n" + "=" * 70)
+    print(f"Total Tests Run: {result.testsRun}")
+    print(f"Failures: {len(result.failures)}")
+    print(f"Errors: {len(result.errors)}")
+    print(f"Skipped: {len(result.skipped)}")
+    print("=" * 70)
+    
+    if not result.wasSuccessful():
+        sys.exit(1)
+    print("ALL TESTS PASSED SUCCESSFULLY.")
+    sys.exit(0)
 
-run_cmd("python scratch_test_9_live.py", "TEST 9")
-run_cmd("python scratch_test_19.py", "TEST 19")
-run_cmd("python scratch_test_combined.py", "TEST COMBINED (20, 22, 24, 25)")
-run_cmd("python -m backend.api.pipeline", "TEST 21")
+if __name__ == "__main__":
+    main()

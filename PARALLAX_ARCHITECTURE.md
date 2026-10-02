@@ -27,9 +27,15 @@ parallax/
 │   ├── layout/
 │   │   └── physics.py               # 2D force-directed simulation and deterministic angular anchors
 │   └── tests/
-│       ├── test_determinism_and_boundary.py # Anchor determinism and boundary detection test suite
-│       ├── spike_clustering.py     # Standalone clustering verification script
-│       └── spike_layout.py         # Standalone layout verification script
+│       ├── fixtures/
+│       │   ├── __init__.py          # Fixtures package marker
+│       │   └── synthetic_corpora.py # Synthetic embedding corpus generators (well-separated, overlapping, boundary)
+│       ├── test_constraint_aware_clustering.py # ADR-001 density isolation & constraint handling
+│       ├── test_stable_identity_and_layout.py  # UUID lineage & circular angular relaxation
+│       ├── test_clustering_quality.py          # HDBSCAN/KMeans silhouette benchmarks & boundary detection
+│       ├── test_constraint_impact.py           # Constraint satisfaction & reassignment impact
+│       ├── test_spatial_stability.py           # Force simulation energy convergence & margin clamping
+│       └── test_api_endpoints.py               # FastAPI test client integration & constraint CRUD
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx                  # Root UI layout, health checking, topbar
@@ -138,3 +144,4 @@ parallax/
 - **Phase 0 (2026-10-02)**: Complete baseline audit performed and documented. System structure, data flow, physics layout, and constraint pipeline audited against source code.
 - **Phase 1 (2026-10-02)**: Implemented true constraint-aware clustering pipeline (`run_constraint_aware_clustering()`), separating constrained documents before HDBSCAN execution, merging forced assignments, computing global centroids and boundaries, and adding dedicated test suite `test_constraint_aware_clustering.py`.
 - **Phase 2 (2026-10-02)**: Verified and hardened stable cluster UUID lineage across incremental updates with full state persistence, fixed cyclic angular relaxation in `compute_home_positions()` using pairwise shortest-arc resolution, and added dedicated test suite `test_stable_identity_and_layout.py`.
+- **Phase 3 (2026-10-02)**: Established comprehensive automated testing and evaluation foundation: modular synthetic corpus fixtures (`synthetic_corpora.py`), test suites for clustering quality, constraint impact, spatial stability, and API endpoints, and a unified test discovery runner `run_all_tests.py` covering 28 test cases with zero external runtime dependencies.
