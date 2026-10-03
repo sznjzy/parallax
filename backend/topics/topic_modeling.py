@@ -12,12 +12,18 @@ Public API
 """
 
 import re
+import json
 import logging
-import numpy as np
+from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Any
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
+
+DEFAULT_METADATA_FILE = Path(__file__).resolve().parent.parent / "api" / "cluster_metadata.json"
+
 
 try:
     from sklearn.feature_extraction.text import CountVectorizer
@@ -58,9 +64,11 @@ class TopicMetadata:
     keywords: list[dict]
     top_terms: list[str]
     doc_count: int
+    is_custom_label: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
+
 
 
 def _clean_text(text: str) -> str:
@@ -166,6 +174,7 @@ def extract_cluster_topics(
     cluster_centers: dict[str, np.ndarray] | None = None,
     model: Any = None,
     top_n: int = 5,
+    metadata_file: Path | None = None,
 ) -> dict[str, dict]:
     """
     Extract automatic topic models for all clusters in the corpus.
@@ -182,6 +191,8 @@ def extract_cluster_topics(
         Loaded SentenceTransformer model (optional, for KeyBERT embedding re-ranking).
     top_n : int
         Number of top representative keywords to extract per cluster.
+    metadata_file : Path | None
+        Optional path to cluster_metadata.json for persistent custom topic overrides.
 
     Returns
     -------
@@ -192,6 +203,16 @@ def extract_cluster_topics(
     n_docs = len(docs)
     if n_docs == 0:
         return topics
+
+    # Load custom metadata overrides if present
+    custom_metadata = {}
+    meta_path = metadata_file or DEFAULT_METADATA_FILE
+    if meta_path and meta_path.exists():
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                custom_metadata = json.load(f)
+        except Exception:
+            custom_metadata = {}
 
     # Group document texts by cluster
     cluster_texts: dict[str, list[str]] = {}
@@ -229,6 +250,7 @@ def extract_cluster_topics(
                 keywords=[{"keyword": "outlier", "score": 1.0}],
                 top_terms=["outlier"],
                 doc_count=cluster_doc_counts.get(cid, 1),
+                is_custom_label=False,
             )
             topics[cid] = meta.to_dict()
 
@@ -243,14 +265,17 @@ def extract_cluster_topics(
     for row_idx, cid in enumerate(ordered_cids):
         short_id = cid.replace("cluster-", "")[:6]
         default_label = f"Topic {short_id}"
+        custom_label = custom_metadata.get(cid, {}).get("custom_topic_label")
+        is_custom = bool(custom_label and custom_label.strip())
 
         if ctfidf_matrix.shape[1] == 0:
             meta = TopicMetadata(
                 cluster_id=cid,
-                topic_label=default_label,
+                topic_label=custom_label.strip() if is_custom else default_label,
                 keywords=[],
                 top_terms=[],
                 doc_count=cluster_doc_counts.get(cid, 0),
+                is_custom_label=is_custom,
             )
             topics[cid] = meta.to_dict()
             continue
@@ -294,7 +319,7 @@ def extract_cluster_topics(
 
         final_keywords = candidates[:top_n]
         top_terms = [kw[0] for kw in final_keywords]
-        formatted_label = _format_topic_label(top_terms, default_label)
+        formatted_label = custom_label.strip() if is_custom else _format_topic_label(top_terms, default_label)
 
         meta = TopicMetadata(
             cluster_id=cid,
@@ -302,7 +327,9 @@ def extract_cluster_topics(
             keywords=[{"keyword": kw[0], "score": round(kw[1], 4)} for kw in final_keywords],
             top_terms=top_terms,
             doc_count=cluster_doc_counts.get(cid, 0),
+            is_custom_label=is_custom,
         )
         topics[cid] = meta.to_dict()
 
     return topics
+

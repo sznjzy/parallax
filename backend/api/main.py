@@ -496,6 +496,135 @@ def search_documents(body: SearchRequest):
 
 
 # ---------------------------------------------------------------------------
+# Cluster Lifecycle Endpoints (Phase 7 — Rename, Merge, Split)
+# ---------------------------------------------------------------------------
+
+class RenameClusterRequest(BaseModel):
+    topic_label: str
+
+
+class MergeClustersRequest(BaseModel):
+    source_cluster_ids: list[str] = []
+    source_cluster_id: str | None = None
+    target_cluster_id: str
+    new_topic_label: str | None = None
+
+
+class SplitClusterRequest(BaseModel):
+    k: int = 2
+    new_topic_labels: list[str] | None = None
+
+
+@app.get("/api/clusters", tags=["clusters"])
+def list_clusters():
+    """
+    List all active clusters with member document lists, counts, and topic metadata.
+    """
+    try:
+        from backend.clustering.lifecycle import get_cluster_lifecycle_state
+        model = _get_model()
+        return get_cluster_lifecycle_state(
+            state_file=STATE_FILE,
+            docs_dir=SAMPLE_DOCS_DIR,
+            model=model,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list clusters: {exc}")
+
+
+@app.put("/api/clusters/{cluster_id}/topic", tags=["clusters"])
+def rename_cluster(cluster_id: str, body: RenameClusterRequest):
+    """
+    Rename a cluster by saving a custom topic title override to persistent metadata.
+    """
+    if not body.topic_label or not body.topic_label.strip():
+        raise HTTPException(status_code=400, detail="topic_label cannot be empty.")
+
+    try:
+        from backend.clustering.lifecycle import rename_cluster_topic
+        result = rename_cluster_topic(
+            cluster_id=cluster_id,
+            new_topic_label=body.topic_label.strip(),
+            state_file=STATE_FILE,
+        )
+        return result
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to rename cluster: {exc}")
+
+
+@app.post("/api/clusters/merge", tags=["clusters"])
+def merge_cluster_endpoint(body: MergeClustersRequest):
+    """
+    Merge one or more source clusters into a target cluster.
+    Reassigns all documents from source clusters to the target cluster,
+    updates persistent constraints and cluster mapping, and updates topic modeling.
+    """
+    sources = list(body.source_cluster_ids)
+    if body.source_cluster_id and body.source_cluster_id not in sources:
+        sources.append(body.source_cluster_id)
+
+    if not sources:
+        raise HTTPException(status_code=400, detail="Must provide at least one source cluster ID to merge.")
+    if not body.target_cluster_id or not body.target_cluster_id.strip():
+        raise HTTPException(status_code=400, detail="target_cluster_id cannot be empty.")
+
+    try:
+        from backend.clustering.lifecycle import merge_clusters
+        model = _get_model()
+        result = merge_clusters(
+            source_cluster_ids=sources,
+            target_cluster_id=body.target_cluster_id.strip(),
+            new_topic_label=body.new_topic_label,
+            state_file=STATE_FILE,
+            docs_dir=SAMPLE_DOCS_DIR,
+            model=model,
+        )
+        return result
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to merge clusters: {exc}")
+
+
+@app.post("/api/clusters/{cluster_id}/split", tags=["clusters"])
+def split_cluster_endpoint(cluster_id: str, body: SplitClusterRequest = SplitClusterRequest()):
+    """
+    Split an existing cluster into k sub-clusters using document embeddings.
+    The largest sub-cluster retains the original cluster UUID lineage, while
+    the remaining sub-clusters receive new stable UUIDs.
+    """
+    if body.k < 2:
+        raise HTTPException(status_code=400, detail="k must be an integer >= 2.")
+
+    try:
+        from backend.clustering.lifecycle import split_cluster
+        model = _get_model()
+        result = split_cluster(
+            cluster_id=cluster_id,
+            k=body.k,
+            new_topic_labels=body.new_topic_labels,
+            state_file=STATE_FILE,
+            docs_dir=SAMPLE_DOCS_DIR,
+            model=model,
+        )
+        return result
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to split cluster: {exc}")
+
+
+
+
+# ---------------------------------------------------------------------------
 # Constraint endpoints  (Track A — manual correction / persistent memory)
 # ---------------------------------------------------------------------------
 

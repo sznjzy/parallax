@@ -18,7 +18,9 @@ import React, { useState, useRef } from 'react'
 import { useApp } from '../state/AppContext'
 import { useConstraints } from '../hooks/useConstraints'
 import { useDocuments } from '../hooks/useDocuments'
+import { useClusterLifecycle } from '../hooks/useClusterLifecycle'
 import { clusterColor } from '../canvas/clusterColor'
+
 
 export default function EvaluationPanel() {
   const { state, dispatch } = useApp()
@@ -700,12 +702,93 @@ function ConstraintRow({ constraint, onRemove, isInactive }) {
 }
 
 function Legend({ nodes, topics }) {
+  const { renameCluster, mergeClusters, splitCluster, isProcessing, lifecycleError, lifecycleSuccess, clearMessages } = useClusterLifecycle()
   const clusters = [...new Set(nodes.filter(n => !n.cluster_id.startsWith('noise-')).map(n => n.cluster_id))]
+  
+  const [activeAction, setActiveAction] = useState(null) // { type: 'rename' | 'merge' | 'split', cid: string }
+  const [renameInput, setRenameInput] = useState('')
+  const [mergeTarget, setMergeTarget] = useState('')
+  const [mergeNewTitle, setMergeNewTitle] = useState('')
+  const [splitK, setSplitK] = useState(2)
+
   if (clusters.length === 0) return null
+
+  const handleStartRename = (cid, currentTitle) => {
+    clearMessages()
+    setRenameInput(currentTitle)
+    setActiveAction({ type: 'rename', cid })
+  }
+
+  const handleSaveRename = async (cid) => {
+    if (!renameInput.trim()) return
+    const ok = await renameCluster(cid, renameInput.trim())
+    if (ok) setActiveAction(null)
+  }
+
+  const handleStartMerge = (cid) => {
+    clearMessages()
+    const otherClusters = clusters.filter(c => c !== cid)
+    setMergeTarget(otherClusters.length > 0 ? otherClusters[0] : '')
+    setMergeNewTitle('')
+    setActiveAction({ type: 'merge', cid })
+  }
+
+  const handleConfirmMerge = async (sourceCid) => {
+    if (!mergeTarget || mergeTarget === sourceCid) return
+    const ok = await mergeClusters([sourceCid], mergeTarget, mergeNewTitle)
+    if (ok) setActiveAction(null)
+  }
+
+  const handleStartSplit = (cid, count) => {
+    clearMessages()
+    setSplitK(2)
+    setActiveAction({ type: 'split', cid })
+  }
+
+  const handleConfirmSplit = async (cid) => {
+    const ok = await splitCluster(cid, splitK)
+    if (ok) setActiveAction(null)
+  }
 
   return (
     <div className="glass-card">
-      <div className="glass-card-title">Clusters & Topics</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <span className="glass-card-title" style={{ margin: 0 }}>
+          Clusters & Lifecycle
+        </span>
+        <span className="badge badge-accent" style={{ fontSize: '0.62rem' }}>
+          {clusters.length} active
+        </span>
+      </div>
+
+      {lifecycleSuccess && (
+        <div style={{
+          padding: '4px 8px',
+          borderRadius: 'var(--radius-sm)',
+          background: 'rgba(34, 197, 94, 0.12)',
+          border: '1px solid rgba(34, 197, 94, 0.3)',
+          color: '#22c55e',
+          fontSize: '0.65rem',
+          marginBottom: 6,
+        }}>
+          ✓ {lifecycleSuccess}
+        </div>
+      )}
+
+      {lifecycleError && (
+        <div style={{
+          padding: '4px 8px',
+          borderRadius: 'var(--radius-sm)',
+          background: 'rgba(239, 68, 68, 0.12)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          color: '#ef4444',
+          fontSize: '0.65rem',
+          marginBottom: 6,
+        }}>
+          ⚠ {lifecycleError}
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {clusters.map(cid => {
           const count = nodes.filter(n => n.cluster_id === cid).length
@@ -714,10 +797,11 @@ function Legend({ nodes, topics }) {
           const topicInfo = topics?.[cid]
           const topicTitle = topicInfo?.topic_label || `Topic ${short}`
           const topKeywords = topicInfo?.top_terms?.slice(0, 3).join(', ')
+          const isActionOpen = activeAction && activeAction.cid === cid
 
           return (
-            <div key={cid} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '3px 0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div key={cid} className="cluster-card">
+              <div className="cluster-card-header">
                 <span
                   style={{
                     fontSize: '0.65rem',
@@ -735,16 +819,51 @@ function Legend({ nodes, topics }) {
                 >
                   {short}
                 </span>
-                <span
-                  className="truncate"
-                  style={{ fontSize: 'var(--text-xs)', fontWeight: 600, flex: 1, color: 'var(--color-text)' }}
-                  title={topicTitle}
-                >
-                  {topicTitle}
-                </span>
-                <span className="badge badge-default" style={{ fontSize: '0.6rem', padding: '0 5px' }}>{count}</span>
+
+                {isActionOpen && activeAction.type === 'rename' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+                    <input
+                      type="text"
+                      className="lifecycle-input"
+                      value={renameInput}
+                      onChange={(e) => setRenameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveRename(cid)
+                        if (e.key === 'Escape') setActiveAction(null)
+                      }}
+                      autoFocus
+                      disabled={isProcessing}
+                    />
+                    <button
+                      className="btn-lifecycle btn-lifecycle-primary"
+                      onClick={() => handleSaveRename(cid)}
+                      disabled={isProcessing}
+                    >
+                      Save
+                    </button>
+                    <button
+                      className="btn-lifecycle"
+                      onClick={() => setActiveAction(null)}
+                      disabled={isProcessing}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span
+                      className="truncate"
+                      style={{ fontSize: 'var(--text-xs)', fontWeight: 600, flex: 1, color: 'var(--color-text)' }}
+                      title={topicTitle}
+                    >
+                      {topicTitle}
+                    </span>
+                    <span className="badge badge-default" style={{ fontSize: '0.6rem', padding: '0 5px' }}>{count}</span>
+                  </>
+                )}
               </div>
-              {topKeywords && (
+
+              {topKeywords && !isActionOpen && (
                 <span
                   className="truncate"
                   style={{
@@ -758,9 +877,121 @@ function Legend({ nodes, topics }) {
                   {topKeywords}
                 </span>
               )}
+
+              {/* ── Active Action Controls ─────────────────────────── */}
+              {isActionOpen && activeAction.type === 'merge' && (
+                <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--color-surface-2)', padding: 6, borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: '0.62rem', color: 'var(--color-text-muted)' }}>Merge into:</span>
+                    <select
+                      className="lifecycle-select"
+                      value={mergeTarget}
+                      onChange={(e) => setMergeTarget(e.target.value)}
+                      disabled={isProcessing}
+                    >
+                      {clusters.filter(c => c !== cid).map(otherCid => (
+                        <option key={otherCid} value={otherCid}>
+                          {otherCid.replace('cluster-', '').slice(0, 6)} ({topics?.[otherCid]?.topic_label || 'Topic'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    type="text"
+                    className="lifecycle-input"
+                    placeholder="Optional new merged title"
+                    value={mergeNewTitle}
+                    onChange={(e) => setMergeNewTitle(e.target.value)}
+                    disabled={isProcessing}
+                  />
+                  <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 2 }}>
+                    <button
+                      className="btn-lifecycle btn-lifecycle-primary"
+                      onClick={() => handleConfirmMerge(cid)}
+                      disabled={isProcessing || !mergeTarget}
+                    >
+                      Confirm Merge
+                    </button>
+                    <button
+                      className="btn-lifecycle"
+                      onClick={() => setActiveAction(null)}
+                      disabled={isProcessing}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {isActionOpen && activeAction.type === 'split' && (
+                <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--color-surface-2)', padding: 6, borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: '0.62rem', color: 'var(--color-text-muted)' }}>Split into:</span>
+                    <select
+                      className="lifecycle-select"
+                      value={splitK}
+                      onChange={(e) => setSplitK(parseInt(e.target.value, 10))}
+                      disabled={isProcessing}
+                    >
+                      {[...Array(Math.min(5, count) - 1)].map((_, i) => (
+                        <option key={i + 2} value={i + 2}>
+                          {i + 2} sub-clusters
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 2 }}>
+                    <button
+                      className="btn-lifecycle btn-lifecycle-primary"
+                      onClick={() => handleConfirmSplit(cid)}
+                      disabled={isProcessing}
+                    >
+                      Run KMeans Split
+                    </button>
+                    <button
+                      className="btn-lifecycle"
+                      onClick={() => setActiveAction(null)}
+                      disabled={isProcessing}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Action Buttons Bar ───────────────────────────────── */}
+              {(!isActionOpen || activeAction.type === 'rename') && (
+                <div className="cluster-action-bar">
+                  <button
+                    className="btn-lifecycle"
+                    onClick={() => handleStartRename(cid, topicTitle)}
+                    disabled={isProcessing}
+                    title="Rename cluster topic"
+                  >
+                    ✏️ Rename
+                  </button>
+                  <button
+                    className="btn-lifecycle"
+                    onClick={() => handleStartSplit(cid, count)}
+                    disabled={isProcessing || count < 2}
+                    title={count < 2 ? "Requires at least 2 documents to split" : "Split cluster into sub-clusters"}
+                  >
+                    ✂️ Split
+                  </button>
+                  <button
+                    className="btn-lifecycle"
+                    onClick={() => handleStartMerge(cid)}
+                    disabled={isProcessing || clusters.length < 2}
+                    title={clusters.length < 2 ? "Requires at least 2 clusters to merge" : "Merge into another cluster"}
+                  >
+                    🔗 Merge
+                  </button>
+                </div>
+              )}
             </div>
           )
         })}
+
         {nodes.filter(n => n.cluster_id.startsWith('noise-')).length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 4, borderTop: '1px solid var(--color-border)' }}>
             <span
@@ -788,3 +1019,4 @@ function Legend({ nodes, topics }) {
     </div>
   )
 }
+

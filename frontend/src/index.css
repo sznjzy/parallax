@@ -967,3 +967,95 @@ body {
   cursor: not-allowed;
 }
 
+/* ── Cluster Lifecycle Management (Phase 7) ────────────────────────── */
+
+.cluster-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.cluster-card:hover {
+  border-color: var(--color-border-bright);
+}
+
+.cluster-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cluster-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.btn-lifecycle {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all var(--transition-fast);
+}
+
+.btn-lifecycle:hover:not(:disabled) {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.btn-lifecycle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-lifecycle-primary {
+  background: rgba(88, 166, 255, 0.15);
+  color: var(--color-accent);
+  border-color: rgba(88, 166, 255, 0.3);
+}
+
+.btn-lifecycle-primary:hover:not(:disabled) {
+  background: rgba(88, 166, 255, 0.25);
+  color: #ffffff;
+}
+
+.lifecycle-input {
+  width: 100%;
+  font-size: var(--text-xs);
+  padding: 3px 6px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  outline: none;
+}
+
+.lifecycle-select {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  outline: none;
+  max-width: 100%;
+}
+
+

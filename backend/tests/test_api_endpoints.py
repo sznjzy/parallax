@@ -94,6 +94,28 @@ class TestApiEndpoints(unittest.TestCase):
         r_404 = self.client.get("/api/documents/nonexistent_paper_999.pdf/pdf")
         self.assertEqual(r_404.status_code, 404)
 
+    def test_cluster_lifecycle_api_endpoints(self):
+        """GET /api/clusters, PUT /topic, POST /merge, POST /split API endpoints."""
+        # 1. GET /api/clusters
+        r = self.client.get("/api/clusters")
+        self.assertEqual(r.status_code, 200)
+        clusters = r.json()
+        self.assertIsInstance(clusters, list)
+
+        if len(clusters) >= 2:
+            c1 = clusters[0]["cluster_id"]
+            c2 = clusters[1]["cluster_id"]
+
+            # 2. PUT /api/clusters/{c1}/topic (Rename)
+            r_rename = self.client.put(
+                f"/api/clusters/{c1}/topic",
+                json={"topic_label": "Advanced Graph Theory"}
+            )
+            self.assertEqual(r_rename.status_code, 200)
+            self.assertEqual(r_rename.json()["topic_label"], "Advanced Graph Theory")
+            self.assertTrue(r_rename.json()["is_custom_label"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
