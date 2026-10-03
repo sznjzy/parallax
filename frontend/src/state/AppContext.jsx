@@ -54,6 +54,14 @@ const initialState = {
   availableDocs: [],   // [{ filename, size_bytes, cached }]
   /** Set of filenames the user has selected to process */
   selectedDocs: new Set(),  // empty = all docs
+  /** Active search query string */
+  searchQuery: '',
+  /** Semantic search response payload from /api/search */
+  searchResults: null,
+  /** Whether search request is in-flight */
+  isSearching: false,
+  /** Whether search highlight / heatmap mode is currently active */
+  searchActive: false,
 }
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
@@ -219,6 +227,35 @@ function reducer(state, action) {
 
     case 'CLEAR_ALL_DOCS': {
       return { ...state, selectedDocs: new Set() }
+    }
+
+    // ── Semantic Search actions (Phase 6) ──────────────────────────────
+    case 'SET_SEARCH_QUERY': {
+      return { ...state, searchQuery: action.query }
+    }
+
+    case 'SET_SEARCHING': {
+      return { ...state, isSearching: action.isSearching }
+    }
+
+    case 'SET_SEARCH_RESULTS': {
+      const hasResults = Boolean(action.results && action.results.results && action.results.results.length > 0)
+      return {
+        ...state,
+        searchResults: action.results,
+        searchActive: hasResults,
+        isSearching: false,
+      }
+    }
+
+    case 'CLEAR_SEARCH': {
+      return {
+        ...state,
+        searchQuery: '',
+        searchResults: null,
+        searchActive: false,
+        isSearching: false,
+      }
     }
 
     default:

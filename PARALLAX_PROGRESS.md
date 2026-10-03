@@ -4,7 +4,7 @@ This file records the actual implementation state of the Parallax repository.
 
 ## Current Phase
 
-Phase 6 — Semantic Search + Canvas Heatmap
+Phase 7 — Interactive Cluster Lifecycle
 
 ## Status
 
@@ -18,10 +18,11 @@ READY FOR APPROVAL
 - **Phase 3 — Testing + Evaluation Foundation**: Established synthetic corpora generators (`backend/tests/fixtures/synthetic_corpora.py`), comprehensive automated test suites for clustering quality, constraint impact, spatial stability, and API endpoints, and replaced legacy scratch test runners with a unified test discovery runner `run_all_tests.py` (28/28 unit tests passing).
 - **Phase 4 — PDF Ingestion + Caching Hardening**: Implemented robust PDF validation (magic byte `%PDF-` checks, size limits, filename sanitization/traversal defense), content-hash SHA-256 deduplication, automatic text chunking and immediate `.npy` disk caching in `backend/ingestion/ingest.py`, `POST /api/documents/upload` and `DELETE /api/documents/{filename}` endpoints, and connected UI file upload controls in `EvaluationPanel.jsx` (35/35 unit tests passing).
 - **Phase 5 — Automatic Cluster Topic Modeling**: Implemented Class-based TF-IDF (c-TF-IDF) in `backend/topics/topic_modeling.py` with optional KeyBERT semantic centroid alignment, academic stopword filtering, dynamic topic updating across constraint/corpus changes, text disk caching (`<hash>.txt`), and UI topic labels in `ClusterRegion.jsx` and `EvaluationPanel.jsx` (47/47 unit tests passing).
+- **Phase 6 — Semantic Search + Canvas Heatmap**: Implemented zero-LLM semantic search engine (`backend/search/semantic_search.py`) utilizing cached 768-dim embeddings (`all-mpnet-base-v2`) and exact cosine similarity, exposed `POST /api/search` with cluster association and aggregated cluster relevance, and added an interactive topbar SearchBar, canvas heatmap glowing halos/badges (`DocumentNode.jsx`), cluster relevance highlights (`ClusterRegion.jsx`), and ranked match sidebar (`EvaluationPanel.jsx`) (55/55 unit tests passing).
 
 ## Current Phase Notes
 
-Phase 5 implemented automatic topic modeling via c-TF-IDF and KeyBERT keyword extraction without LLM dependencies. All 47 automated tests pass. Phase 6 will implement semantic search and canvas heatmap highlighting.
+Phase 6 implemented semantic search across document embeddings with exact cosine similarity ranking and canvas heatmap halos with zero LLM dependencies. All 55 automated tests pass. Phase 7 will implement interactive cluster lifecycle management (rename, merge, split).
 
 ## Phase History
 
@@ -33,7 +34,7 @@ Phase 5 implemented automatic topic modeling via c-TF-IDF and KeyBERT keyword ex
 | 3 | COMPLETE | 22d8384 | Testing and evaluation foundation: synthetic corpora fixtures, modular test suites (quality, constraints, physics, API), unified runner |
 | 4 | COMPLETE | 56147f5 | PDF upload & ingestion hardening: magic bytes validation, deduplication, disk caching, upload/delete API & UI |
 | 5 | COMPLETE | 23c987e | Automatic cluster topic modeling: c-TF-IDF, KeyBERT semantic centroid alignment, text disk cache, UI integration |
-| 6 | NOT STARTED | — | Semantic search and canvas heatmap |
+| 6 | COMPLETE | — | Semantic search engine, POST /api/search, canvas glowing halo heatmap, relevance sidebar |
 | 7 | NOT STARTED | — | Cluster lifecycle management |
 | 8 | NOT STARTED | — | Citation network |
 | 9 | NOT STARTED | — | Semantic frontier / candidate gap radar |

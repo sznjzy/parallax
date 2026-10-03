@@ -27,6 +27,7 @@ import CanvasControls from './canvas/CanvasControls'
 import EvaluationPanel from './components/EvaluationPanel'
 import StatusBanner from './components/StatusBanner'
 import PdfViewerModal from './components/PdfViewerModal'
+import SearchBar from './components/SearchBar'
 
 export default function App() {
   const { state, dispatch } = useApp()
@@ -83,6 +84,9 @@ export default function App() {
             Semantic Research Canvas
           </span>
         </div>
+
+        {/* Semantic Search Bar */}
+        <SearchBar />
 
         <div className="app-topbar-actions">
           {/* Cluster count pill */}

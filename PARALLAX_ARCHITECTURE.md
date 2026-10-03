@@ -30,6 +30,9 @@ parallax/
 │   ├── topics/
 │   │   ├── __init__.py              # Topic modeling package marker
 │   │   └── topic_modeling.py        # c-TF-IDF, KeyBERT semantic centroid alignment, keyword extraction
+│   ├── search/
+│   │   ├── __init__.py              # Search package marker
+│   │   └── semantic_search.py       # Exact cosine similarity search, snippet extraction, cluster relevance
 │   └── tests/
 │       ├── fixtures/
 │       │   ├── __init__.py          # Fixtures package marker
@@ -42,19 +45,21 @@ parallax/
 │       ├── test_api_endpoints.py               # FastAPI test client integration & constraint CRUD
 │       ├── test_pdf_ingestion_and_caching.py   # PDF magic byte validation, hash deduplication, live caching, upload/delete API
 │       ├── test_outlier_spatial_isolation.py   # ADR-007 Outlier noise classification & convex hull spatial isolation
-│       └── test_topic_modeling.py              # ADR-008 c-TF-IDF, KeyBERT semantic alignment & dynamic updates
+│       ├── test_topic_modeling.py              # ADR-008 c-TF-IDF, KeyBERT semantic alignment & dynamic updates
+│       └── test_semantic_search.py             # Cosine similarity ranking, empty query/corpus edge cases, search API
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx                  # Root UI layout, health checking, topbar
 │   │   ├── index.css                # Design system tokens and styling
 │   │   ├── canvas/
 │   │   │   ├── ResearchCanvas.jsx   # Konva Stage/Layer canvas container with pan/zoom/drag
-│   │   │   ├── DocumentNode.jsx     # Document circle rendering, boundary rings, drag handlers
-│   │   │   ├── ClusterRegion.jsx    # Cluster hulls/regions and centroid labels
+│   │   │   ├── DocumentNode.jsx     # Document circle rendering, boundary rings, drag handlers, radiant search halos
+│   │   │   ├── ClusterRegion.jsx    # Cluster hulls/regions, centroid labels, cluster relevance highlights
 │   │   │   ├── CanvasControls.jsx   # Zoom, fit-to-screen, and organize actions
 │   │   │   └── clusterColor.js      # Deterministic palette assigning distinct colors to clusters
 │   │   ├── components/
-│   │   │   ├── EvaluationPanel.jsx  # Metrics sidebar (Silhouette score, constraints, document list)
+│   │   │   ├── SearchBar.jsx        # Semantic search topbar input with debounce, clear, and match counter
+│   │   │   ├── EvaluationPanel.jsx  # Metrics sidebar (Silhouette score, constraints, search results, doc list)
 │   │   │   ├── StatusBanner.jsx     # Loading/error notification overlay
 │   │   │   ├── PdfViewerModal.jsx   # In-app PDF reader modal
 │   │   │   ├── SelectedNodeBar.jsx  # Floating bottom bar with actions for active node
@@ -62,6 +67,7 @@ parallax/
 │   │   │   └── ConstraintToast.jsx  # Toast notifications for manual constraint placement
 │   │   ├── hooks/
 │   │   │   ├── useOrganize.js       # Pipeline execution hook
+│   │   │   ├── useSearch.js         # Semantic search execution and state hook
 │   │   │   ├── useConstraints.js    # Constraint fetch/mutate hook
 │   │   │   ├── useDocuments.js      # Document list and cache inspection hook
 │   │   │   └── useCanvasSize.js     # Canvas resize observer hook
@@ -124,12 +130,22 @@ parallax/
 - **Text Disk Cache**: Extracted document text is cached at `data/embedding_cache/<sha256>.txt` to ensure instantaneous topic recalculations on cached corpora.
 - **Dynamic Updates**: Topics, titles, and representative keywords automatically recalculate whenever cluster membership changes (incremental PDF additions or manual drag-and-drop constraints).
 
+### 7. Semantic Search Engine & Heatmap (Phase 6)
+- **Engine**: `backend.search.semantic_search` (`search_corpus()`, `SearchResult`, `ClusterRelevance`).
+- **Model Space**: Uses the same `sentence-transformers/all-mpnet-base-v2` unit-normalized 768-dim space as corpus embeddings.
+- **Similarity Metric**: Cosine similarity via unit-vector dot product $q \cdot d$, bounded in $[-1.0, 1.0]$.
+- **Cluster Association & Relevance**: Integrates document cluster membership from `cluster_mapping.json` and computes cluster-level aggregates (`mean_similarity`, `max_similarity`, `matched_docs_count`).
+- **Explainability**: Extracts representative matching snippet passages from cached document text.
+- **Non-Mutating**: Pure read-only operation; zero mutation of corpus, clustering, layout, or constraints.
+- **Zero LLM**: Operates deterministically without external LLM calls.
+
 ## Frontend Architecture
 
 - **Stack**: React 18 + Vite + Konva / react-konva + Lucide icons.
 - **Design System**: Vanilla CSS tokens in `frontend/src/index.css` (dark mode default, glassmorphism headers, responsive panel layouts).
-- **Canvas Viewport**: `ResearchCanvas.jsx` renders clustered document nodes with convex hulls / cluster boundaries, smooth dragging, real-time boundary rings, and manual cluster reassignment via drag-and-drop.
-- **Evaluation & Documents**: `EvaluationPanel.jsx` presents live clustering silhouette score, constraint satisfaction metrics, corpus document selection, cluster legend with topic titles and top keywords, and PDF reader modal triggers.
+- **Canvas Viewport**: `ResearchCanvas.jsx` renders clustered document nodes with convex hulls / cluster boundaries, smooth dragging, real-time boundary rings, manual cluster reassignment via drag-and-drop, and dynamic search heatmap radiant halos.
+- **Search & Heatmap**: `SearchBar.jsx` in topbar provides instant semantic search input, highlighting matched nodes with radiant halos (`DocumentNode.jsx`), glowing cluster boundaries (`ClusterRegion.jsx`), and ranked similarity list (`EvaluationPanel.jsx`).
+- **Evaluation & Documents**: `EvaluationPanel.jsx` presents live clustering silhouette score, constraint satisfaction metrics, corpus document selection, semantic search matches, cluster legend with topic titles and top keywords, and PDF reader modal triggers.
 
 ## Verified API Endpoints
 
@@ -138,6 +154,7 @@ parallax/
 | GET | `/` | Liveness health check |
 | GET | `/api/status` | Readiness check (PDF count, dependency availability) |
 | POST | `/api/organize` | Execute embedding, clustering, physics layout, and topic modeling pipeline |
+| POST | `/api/search` | Semantic search across corpus with cosine similarity ranking and cluster relevance |
 | GET | `/api/documents` | List available PDFs in corpus with cache status |
 | POST | `/api/documents/upload` | Multi-PDF upload with validation, deduplication, and immediate caching |
 | DELETE | `/api/documents/{filename}` | Delete PDF from corpus with constraint and state pruning |
@@ -150,8 +167,8 @@ parallax/
 
 ## Known Limitations & Deviations Identified
 
-1. **Semantic Search**: Text search across cluster canvas vectors and chunk-level highlighting is scheduled for Phase 6.
-2. **Cluster Lifecycle**: Interactive cluster rename, merge, and split API endpoints are scheduled for Phase 7.
+1. **Cluster Lifecycle**: Interactive cluster rename, merge, and split API endpoints are scheduled for Phase 7.
+2. **Citation Network Overlay**: Extracting and representing citation linkages across corpus papers is scheduled for Phase 8.
 3. **Research Evidence Explorer**: Scheduled for Phase 10 as a deterministic, zero-LLM explainability layer grounded exclusively in measurable signals (cosine similarities, c-TF-IDF keywords, centroid distances, citation edges) per ADR-006 / ADR-009.
 
 ## Architecture Change Log
@@ -163,3 +180,4 @@ parallax/
 - **Phase 4 (2026-10-02)**: Implemented production-grade PDF upload, validation, deduplication, text chunking, and immediate `.npy` disk caching in `backend/ingestion/ingest.py`, exposed `POST /api/documents/upload` and `DELETE /api/documents/{filename}`, added comprehensive test suite `test_pdf_ingestion_and_caching.py` (35/35 tests passing), and added frontend upload/delete controls in `EvaluationPanel.jsx`.
 - **Post-Phase 4 Correction (2026-10-03)**: Implemented outlier spatial isolation (ADR-007): angular gap bisector anchoring for noise clusters, strong mutual noise-cluster repulsion, gravity exclusion, and geometric convex hull clearance guarantee (`ensure_outlier_hull_isolation()`), adding regression suite `test_outlier_spatial_isolation.py` (39/39 tests passing).
 - **Phase 5 (2026-10-03)**: Implemented automatic cluster topic modeling via Class-based TF-IDF (c-TF-IDF) and KeyBERT semantic centroid alignment in `backend/topics/topic_modeling.py`, added extracted text disk caching (`<sha256>.txt`), integrated topics into `run_pipeline()`, `/api/organize`, and `/api/analyze`, updated frontend `ClusterRegion.jsx` and `EvaluationPanel.jsx` to render dynamic topic titles and representative keywords, and added comprehensive test suite `test_topic_modeling.py` (47/47 tests passing).
+- **Phase 6 (2026-10-03)**: Implemented semantic search engine (`backend/search/semantic_search.py`), exact cosine similarity ranking against cached 768-dim embeddings, `POST /api/search` endpoint with cluster relevance aggregation, topbar `SearchBar.jsx`, canvas radiant glowing heatmap halos (`DocumentNode.jsx`), cluster relevance highlights (`ClusterRegion.jsx`), and ranked match sidebar (`EvaluationPanel.jsx`), adding dedicated test suite `test_semantic_search.py` (55/55 tests passing).

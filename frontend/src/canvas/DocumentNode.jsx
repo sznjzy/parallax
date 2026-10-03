@@ -50,6 +50,8 @@ export default function DocumentNode({
   isSelected,
   isDimmed,
   isPinned,
+  searchActive,
+  searchResult,
   onSelect,
   onOpenPdf,
   onHover,
@@ -69,13 +71,25 @@ export default function DocumentNode({
   const color     = clusterColor(node.cluster_id)
   const nodeColor = isNoise ? '#6e7681' : color
 
+  // Search relevance calculations (Phase 6)
+  const sim = searchResult ? searchResult.similarity_score : 0
+  const isMatch = Boolean(searchActive && searchResult && sim > 0.15)
+  const isTopMatch = Boolean(searchActive && searchResult && searchResult.rank <= 3)
+  const relevancePct = Math.round(Math.max(0, sim) * 100)
+
   // Dynamic opacity
-  const opacity = isDimmed ? 0.22 : 1.0
+  let opacity = 1.0
+  if (searchActive) {
+    opacity = isMatch ? Math.min(1.0, 0.4 + sim * 0.6) : 0.18
+  } else if (isDimmed) {
+    opacity = 0.22
+  }
 
   // Shadow config
-  const shadowBlur  = dragging ? 28 : hovered ? 18 : isSelected ? 14 : 0
-  const shadowColor = nodeColor
-  const curScale    = dragging ? DRAG_SCALE : hovered ? HOVER_SCALE : 1.0
+  const shadowBlur  = dragging ? 28 : (isTopMatch ? 24 : hovered ? 18 : isSelected ? 14 : isMatch ? 12 : 0)
+  const shadowColor = isMatch ? '#58a6ff' : nodeColor
+  const searchScaleBoost = isTopMatch ? 1.22 : isMatch ? 1.08 + sim * 0.12 : 1.0
+  const curScale    = dragging ? DRAG_SCALE : (hovered ? HOVER_SCALE : 1.0) * searchScaleBoost
 
   const isFirstRenderRef = useRef(true)
   const prevPosRef = useRef({ x: px, y: py })
@@ -233,6 +247,30 @@ export default function DocumentNode({
         }
       }}
     >
+      {/* Semantic Search Heatmap Aura / Halo (Phase 6) */}
+      {isMatch && (
+        <Group listening={false}>
+          {/* Outer diffuse glow */}
+          <Circle
+            radius={BASE_RADIUS + 7 + sim * 7}
+            fill="#58a6ff"
+            opacity={0.15 + sim * 0.25}
+            shadowColor="#58a6ff"
+            shadowBlur={16 + sim * 12}
+            shadowOpacity={0.8}
+            listening={false}
+          />
+          {/* Radiant pulse ring */}
+          <Ring
+            innerRadius={BASE_RADIUS + 3}
+            outerRadius={BASE_RADIUS + 5 + sim * 4}
+            fill="#58a6ff"
+            opacity={0.5 + sim * 0.4}
+            listening={false}
+          />
+        </Group>
+      )}
+
       {/* Noise / Outlier ring */}
       {isNoise && (
         <Ring
@@ -269,6 +307,38 @@ export default function DocumentNode({
         shadowOffsetY={dragging ? 4 : 0}
         listening={true}
       />
+
+      {/* Match Score Badge for Semantic Search */}
+      {isMatch && (
+        <Group y={-BASE_RADIUS - 13} listening={false}>
+          <Rect
+            x={-14}
+            y={0}
+            width={28}
+            height={11}
+            cornerRadius={4}
+            fill="rgba(88, 166, 255, 0.92)"
+            stroke="#1f6feb"
+            strokeWidth={0.5}
+            shadowColor="#58a6ff"
+            shadowBlur={6}
+            shadowOpacity={0.5}
+            listening={false}
+          />
+          <Text
+            text={`${relevancePct}%`}
+            fontSize={7}
+            fontFamily="Inter, system-ui, sans-serif"
+            fontStyle="bold"
+            fill="#ffffff"
+            align="center"
+            width={28}
+            x={-14}
+            y={1.5}
+            listening={false}
+          />
+        </Group>
+      )}
 
       {/* Selected ring */}
       {isSelected && (

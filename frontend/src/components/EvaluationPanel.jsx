@@ -71,6 +71,139 @@ export default function EvaluationPanel() {
 
       <div className="sidebar-body">
 
+        {/* ── Semantic Search Results (Phase 6) ─────────────────── */}
+        {state.searchActive && state.searchResults && (
+          <div className="glass-card" style={{ border: '1px solid var(--color-accent)', background: 'rgba(88, 166, 255, 0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span className="glass-card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-accent)' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.35-4.35" />
+                </svg>
+                Search Results
+                <span className="badge badge-accent" style={{ fontSize: '0.65rem', padding: '0 6px' }}>
+                  {state.searchResults.results.length}
+                </span>
+              </span>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: '0.65rem', padding: '1px 6px', color: 'var(--color-text-muted)' }}
+                onClick={() => dispatch({ type: 'CLEAR_SEARCH' })}
+                title="Clear active search"
+              >
+                Clear
+              </button>
+            </div>
+
+            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: 8, fontStyle: 'italic' }}>
+              Query: &ldquo;{state.searchResults.query}&rdquo;
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+              {state.searchResults.results.map((res) => {
+                const isSelected = state.selectedDocId === res.doc_id
+                const clr = clusterColor(res.cluster_id)
+                const pct = Math.round(res.similarity_score * 100)
+                const shortCid = res.cluster_id.replace('cluster-', '').slice(0, 6)
+
+                return (
+                  <div
+                    key={res.doc_id}
+                    onClick={() => dispatch({ type: 'SELECT_NODE', doc_id: res.doc_id })}
+                    style={{
+                      padding: '6px 8px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: isSelected ? 'var(--color-surface-2)' : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${isSelected ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+                        <span
+                          style={{
+                            fontSize: '0.62rem',
+                            fontWeight: 700,
+                            color: res.rank <= 3 ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                            fontFamily: 'var(--font-mono)',
+                            minWidth: 16,
+                          }}
+                        >
+                          #{res.rank}
+                        </span>
+                        <span
+                          className="truncate"
+                          style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text)' }}
+                          title={res.filename}
+                        >
+                          {res.filename.replace('.pdf', '')}
+                        </span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          color: pct >= 60 ? 'var(--color-success)' : pct >= 40 ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                          fontFamily: 'var(--font-mono)',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {pct}%
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span
+                        style={{
+                          fontSize: '0.58rem',
+                          padding: '0 4px',
+                          borderRadius: 3,
+                          background: `${clr}18`,
+                          color: clr,
+                          border: `1px solid ${clr}40`,
+                          fontFamily: 'var(--font-mono)',
+                        }}
+                      >
+                        {shortCid}
+                      </span>
+                      <span
+                        className="truncate"
+                        style={{ fontSize: '0.62rem', color: 'var(--color-text-subtle)' }}
+                      >
+                        {res.topic_label}
+                      </span>
+                    </div>
+
+                    {res.snippet && (
+                      <p
+                        style={{
+                          fontSize: '0.62rem',
+                          color: 'var(--color-text-muted)',
+                          lineHeight: 1.3,
+                          margin: 0,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                        title={res.snippet}
+                      >
+                        {res.snippet}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {state.searchActive && state.searchResults && <div className="divider" />}
+
         {/* ── Document Selector & Upload ─────────────────────────── */}
         <div className="glass-card">
           <div

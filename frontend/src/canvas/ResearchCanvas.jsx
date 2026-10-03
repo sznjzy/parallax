@@ -297,6 +297,21 @@ export default function ResearchCanvas({ onConstraintAdded }) {
     return state.nodes.find(n => n.doc_id === state.selectedDocId)?.cluster_id ?? null
   }, [state.selectedDocId, state.nodes])
 
+  // ── Semantic Search Heatmap data (Phase 6) ─────────────────────────
+  const searchResultsMap = useMemo(() => {
+    if (!state.searchActive || !state.searchResults?.results) return null
+    const map = {}
+    for (const r of state.searchResults.results) {
+      map[r.doc_id] = r
+    }
+    return map
+  }, [state.searchActive, state.searchResults])
+
+  const clusterRelevanceMap = useMemo(() => {
+    if (!state.searchActive || !state.searchResults?.cluster_relevance) return null
+    return state.searchResults.cluster_relevance
+  }, [state.searchActive, state.searchResults])
+
   return (
     <div
       ref={containerRef}
@@ -332,6 +347,8 @@ export default function ResearchCanvas({ onConstraintAdded }) {
                 scale={baseScale}
                 isSelected={cid === selectedClusterId}
                 isDragTarget={cid === dragTargetClusterId}
+                searchActive={state.searchActive}
+                clusterRelevance={clusterRelevanceMap?.[cid]}
               />
             ))}
           </Layer>
@@ -350,6 +367,8 @@ export default function ResearchCanvas({ onConstraintAdded }) {
                   node.doc_id !== state.selectedDocId
                 }
                 isPinned={constrainedDocIds.has(node.doc_id)}
+                searchActive={state.searchActive}
+                searchResult={searchResultsMap?.[node.doc_id]}
                 onSelect={handleSelect}
                 onOpenPdf={(doc_id) => dispatch({ type: 'VIEW_DOCUMENT', doc_id })}
                 onHover={handleHover}

@@ -102,7 +102,15 @@ function expandHull(hull, cx, cy, padding = PADDING) {
   })
 }
 
-export default function ClusterRegion({ cluster_id, nodes, scale, isSelected, isDragTarget }) {
+export default function ClusterRegion({
+  cluster_id,
+  nodes,
+  scale,
+  isSelected,
+  isDragTarget,
+  searchActive,
+  clusterRelevance,
+}) {
   const { state } = useApp()
 
   // Skip noise pseudo-clusters
@@ -116,15 +124,37 @@ export default function ClusterRegion({ cluster_id, nodes, scale, isSelected, is
   const cy = pts.reduce((sum, p) => sum + p.y, 0) / pts.length
 
   const color = clusterColor(cluster_id)
-  const isHighlighted = isSelected || isDragTarget
-  const fillOpacity = isDragTarget ? 0.28 : isSelected ? 0.20 : 0.09
-  const strokeOpacity = isDragTarget ? 0.90 : isSelected ? 0.65 : 0.35
-  const strokeWidth = isDragTarget ? 2.5 : isSelected ? 2 : 1.5
+
+  // Search relevance calculations (Phase 6)
+  const maxSim = clusterRelevance ? clusterRelevance.max_similarity : 0
+  const isRelevantCluster = Boolean(searchActive && clusterRelevance && maxSim >= 0.35)
+
+  let fillOpacity = 0.09
+  let strokeOpacity = 0.35
+  let strokeWidth = 1.5
+
+  if (isDragTarget) {
+    fillOpacity = 0.28
+    strokeOpacity = 0.90
+    strokeWidth = 2.5
+  } else if (isSelected) {
+    fillOpacity = 0.20
+    strokeOpacity = 0.65
+    strokeWidth = 2.0
+  } else if (searchActive) {
+    fillOpacity = isRelevantCluster ? Math.min(0.32, 0.12 + maxSim * 0.22) : 0.03
+    strokeOpacity = isRelevantCluster ? 0.85 : 0.15
+    strokeWidth = isRelevantCluster ? 2.2 : 1.0
+  }
+
+  const isHighlighted = isSelected || isDragTarget || isRelevantCluster
 
   const shortClusterLabel = cluster_id.replace(/^cluster-/, '').slice(0, 6)
   const topicMeta = state?.topics?.[cluster_id]
   const displayTitle = topicMeta?.topic_label || `Topic ${shortClusterLabel}`
-  const labelText = `${displayTitle} · ${clusterNodes.length}`
+  const labelText = searchActive && isRelevantCluster
+    ? `${displayTitle} · ${Math.round(maxSim * 100)}% rel`
+    : `${displayTitle} · ${clusterNodes.length}`
 
   // 1 Node special case: circle
   if (pts.length === 1) {

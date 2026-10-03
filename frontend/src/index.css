@@ -817,3 +817,122 @@ body {
   flex-shrink: 0;
 }
 
+/* ---- Semantic Search (Phase 6) --------------------------- */
+.search-bar-form {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  max-width: 420px;
+  margin: 0 16px;
+}
+
+.search-bar-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 4px 6px 4px 12px;
+  gap: 8px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.search-bar-container:hover {
+  border-color: var(--color-border-hover);
+}
+
+.search-bar-container:focus-within,
+.search-bar-container.active {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+  background: var(--color-surface-2);
+}
+
+.search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.search-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  min-width: 80px;
+}
+
+.search-input::placeholder {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.search-badge {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(88, 166, 255, 0.15);
+  color: var(--color-accent);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.search-clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast);
+}
+
+.search-clear-btn:hover {
+  color: var(--color-text);
+}
+
+.search-submit-btn {
+  background: var(--color-accent);
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.search-submit-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+.search-submit-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+

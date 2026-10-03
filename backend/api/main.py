@@ -456,6 +456,46 @@ def delete_document(filename: str):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/search — Semantic Search over Document Corpus (Phase 6)
+# ---------------------------------------------------------------------------
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int | None = None
+    filenames: list[str] | None = None
+
+
+@app.post("/api/search", tags=["search"])
+def search_documents(body: SearchRequest):
+    """
+    Semantic search across corpus document embeddings.
+    Embeds query using all-mpnet-base-v2, computes cosine similarity,
+    and returns ranked documents with cluster associations and cluster relevance.
+    """
+    if not body.query or not body.query.strip():
+        raise HTTPException(status_code=400, detail="Search query cannot be empty.")
+
+    try:
+        from backend.search.semantic_search import search_corpus
+        model = _get_model()
+        doc_filter = set(body.filenames) if body.filenames else None
+
+        result = search_corpus(
+            query=body.query.strip(),
+            corpus_dir=SAMPLE_DOCS_DIR,
+            model=model,
+            top_k=body.top_k,
+            doc_filter=doc_filter,
+            state_file=STATE_FILE,
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Search failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Constraint endpoints  (Track A — manual correction / persistent memory)
 # ---------------------------------------------------------------------------
 
