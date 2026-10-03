@@ -19,11 +19,31 @@ export default function SelectedNodeBar() {
 
   const filename = node.doc_id.replace(/^doc-/, '')
   const color = clusterColor(node.cluster_id)
-  const isNoise = node.cluster_id.startsWith('noise-')
-  const pdfUrl = `/api/documents/${encodeURIComponent(filename)}/pdf`
+  const isNoise = node.cluster_id.startsWith('noise-') || node.cluster_id === 'noise' || node.cluster_id === 'unassigned' || node.cluster_id === 'cluster-unassigned'
+  const match = state.searchResults?.results?.find(
+    r => r.doc_id === node.doc_id || r.filename === filename || r.doc_id === `doc-${filename}`
+  )
+
+  const basePdfUrl = `/api/documents/${encodeURIComponent(filename)}/pdf`
+  const hashParts = []
+  if (match?.page_number && match.page_number > 1) {
+    hashParts.push(`page=${match.page_number}`)
+  }
+  const highlight = match?.highlight_term || (match?.match_type === 'exact' ? state.searchResults?.query : null)
+  if (highlight) {
+    hashParts.push(`search=${encodeURIComponent(highlight)}`)
+  }
+  const pdfUrl = hashParts.length > 0 ? `${basePdfUrl}#${hashParts.join('&')}` : basePdfUrl
 
   const handleOpenModal = () => {
-    dispatch({ type: 'VIEW_DOCUMENT', filename })
+    dispatch({
+      type: 'VIEW_DOCUMENT',
+      filename,
+      doc_id: node.doc_id,
+      page: match?.page_number || 1,
+      highlightTerm: highlight,
+      searchMatch: match || null,
+    })
   }
 
   const handleDeselect = () => {
@@ -48,10 +68,26 @@ export default function SelectedNodeBar() {
                 color: isNoise ? 'var(--color-text-muted)' : color,
                 borderColor: isNoise ? 'var(--color-border)' : `${color}40`,
                 fontFamily: 'var(--font-mono)',
+                fontWeight: isNoise ? 600 : 400,
               }}
             >
-              {isNoise ? 'Noise Outlier' : node.cluster_id}
+              {isNoise ? 'Outlier' : node.cluster_id}
             </span>
+            {match && (
+              <span
+                className="badge"
+                style={{
+                  fontSize: '0.62rem',
+                  padding: '1px 6px',
+                  background: match.match_type === 'exact' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(88, 166, 255, 0.15)',
+                  color: match.match_type === 'exact' ? '#22c55e' : 'var(--color-accent)',
+                  borderColor: match.match_type === 'exact' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(88, 166, 255, 0.3)',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {Math.round(match.similarity_score * 100)}% Match{match.page_number ? ` • P.${match.page_number}` : ''}
+              </span>
+            )}
             {node.is_boundary_document && (
               <span className="badge badge-warning" style={{ fontSize: '0.6rem', padding: '1px 5px' }}>
                 Boundary

@@ -46,6 +46,12 @@ const initialState = {
   selectedDocId: null,
   /** Filename of the PDF currently being viewed in the modal viewer, or null */
   viewingDoc: null,
+  /** Active page to display in PDF viewer (1-indexed) */
+  viewerPage: 1,
+  /** Active search highlight phrase/term in PDF viewer */
+  viewerHighlight: null,
+  /** Active SearchResult object passed to viewer */
+  viewerMatch: null,
   /** 'dark' | 'light' — persisted to localStorage */
   theme: localStorage.getItem('parallax-theme') || 'dark',
   /** True when running against static fixture instead of live backend */
@@ -186,11 +192,24 @@ function reducer(state, action) {
           filename += '.pdf'
         }
       }
-      return { ...state, viewingDoc: filename || null }
+      return {
+        ...state,
+        viewingDoc: filename || null,
+        selectedDocId: action.doc_id || (filename ? `doc-${filename}` : state.selectedDocId),
+        viewerPage: action.page || 1,
+        viewerHighlight: action.highlightTerm || null,
+        viewerMatch: action.searchMatch || null,
+      }
     }
 
     case 'CLOSE_DOCUMENT_VIEWER':
-      return { ...state, viewingDoc: null }
+      return {
+        ...state,
+        viewingDoc: null,
+        viewerPage: 1,
+        viewerHighlight: null,
+        viewerMatch: null,
+      }
 
     case 'SET_MOCK_MODE':
       return { ...state, mockMode: action.mockMode }
@@ -255,6 +274,8 @@ function reducer(state, action) {
         searchResults: null,
         searchActive: false,
         isSearching: false,
+        viewerHighlight: null,
+        viewerMatch: null,
       }
     }
 

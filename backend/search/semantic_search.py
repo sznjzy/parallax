@@ -10,6 +10,7 @@ User query
 → cosine similarity against cached/computed document canvas vectors
 → ranked documents
 → cluster association (stable cluster IDs and c-TF-IDF topic labels)
+→ deterministic page-aware match location & excerpt grounding
 → cluster-level relevance aggregation for canvas heatmap / glow
 
 Guarantees:
@@ -19,7 +20,7 @@ Guarantees:
 3. Non-mutating: does NOT alter corpus, cluster assignments, constraints, or layout.
 4. Fast: reuses disk cache (data/embedding_cache/<sha256>.npy) with < 1ms retrieval per doc.
 5. Robust: handles empty queries, empty corpora, missing files, and small corpora cleanly.
-6. Zero LLM dependencies.
+6. Deterministic zero-LLM page matching and highlight extraction.
 """
 
 import json
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SearchResult:
-    """Represents a single ranked document match."""
+    """Represents a single ranked document match with page-aware highlight metadata."""
     doc_id: str
     filename: str
     similarity_score: float
@@ -51,6 +52,10 @@ class SearchResult:
     topic_label: str
     snippet: str
     rank: int
+    page_number: int = 1
+    match_type: str = "semantic"  # "exact" | "partial" | "semantic"
+    highlight_term: str | None = None
+    match_count: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -61,6 +66,10 @@ class SearchResult:
             "topic_label": self.topic_label,
             "snippet": self.snippet,
             "rank": self.rank,
+            "page_number": self.page_number,
+            "match_type": self.match_type,
+            "highlight_term": self.highlight_term,
+            "match_count": self.match_count,
         }
 
 
@@ -139,6 +148,140 @@ def extract_best_snippet(text: str, query: str, max_chars: int = 180) -> str:
     if len(res) > max_chars:
         res = res[:max_chars].rsplit(" ", 1)[0] + "..."
     return res
+
+
+def find_match_location(
+    pdf_path: Path,
+    query: str,
+    full_text: str = "",
+) -> dict[str, Any]:
+    """
+    Deterministically locate the most relevant page and excerpt for a search query.
+
+    Heuristic priority (Zero-LLM):
+    1. Exact phrase match (case-insensitive) on a specific page.
+    2. High-density keyword co-occurrence across pages.
+    3. First page / opening abstract for pure semantic matches.
+
+    Returns dict with:
+        page_number : int (1-indexed)
+        match_type : str ("exact" | "partial" | "semantic")
+        highlight_term : str | None
+        match_count : int (total occurrences found in document)
+        snippet : str (clean context excerpt)
+    """
+    cleaned_query = query.strip()
+    if not cleaned_query or not pdf_path.exists():
+        return {
+            "page_number": 1,
+            "match_type": "semantic",
+            "highlight_term": None,
+            "match_count": 0,
+            "snippet": extract_best_snippet(full_text, cleaned_query) if full_text else "",
+        }
+
+    # Extract pages
+    from backend.embeddings.pipeline import extract_pages_from_pdf
+    pages = extract_pages_from_pdf(pdf_path)
+    if not pages:
+        return {
+            "page_number": 1,
+            "match_type": "semantic",
+            "highlight_term": None,
+            "match_count": 0,
+            "snippet": extract_best_snippet(full_text, cleaned_query) if full_text else "",
+        }
+
+    # 1. Exact phrase search (case-insensitive)
+    escaped_query = re.escape(cleaned_query)
+    pattern = re.compile(rf"\b{escaped_query}\b", re.IGNORECASE)
+    fallback_pattern = re.compile(escaped_query, re.IGNORECASE)
+
+    total_exact_matches = 0
+    first_exact_page = None
+    first_exact_snippet = ""
+    first_exact_term = cleaned_query
+
+    for page_info in pages:
+        p_num = page_info["page_number"]
+        p_text = page_info["text"]
+        if not p_text:
+            continue
+
+        matches = list(pattern.finditer(p_text))
+        if not matches:
+            matches = list(fallback_pattern.finditer(p_text))
+
+        if matches:
+            total_exact_matches += len(matches)
+            if first_exact_page is None:
+                first_exact_page = p_num
+                m = matches[0]
+                first_exact_term = p_text[m.start():m.end()]
+                start = max(0, m.start() - 80)
+                end = min(len(p_text), m.end() + 120)
+                first_exact_snippet = re.sub(r"\s+", " ", p_text[start:end]).strip()
+
+    if first_exact_page is not None:
+        return {
+            "page_number": first_exact_page,
+            "match_type": "exact",
+            "highlight_term": first_exact_term,
+            "match_count": total_exact_matches,
+            "snippet": first_exact_snippet,
+        }
+
+    # 2. Multi-word partial keyword search
+    query_words = [
+        w for w in re.findall(r"\w+", cleaned_query.lower())
+        if w not in {"a", "an", "the", "in", "on", "of", "for", "and", "or", "to", "with", "by", "at", "from"} and len(w) > 2
+    ]
+
+    if query_words:
+        best_page = 1
+        best_overlap_count = 0
+        best_term = None
+        best_snippet = ""
+
+        for page_info in pages:
+            p_num = page_info["page_number"]
+            p_text = page_info["text"]
+            if not p_text:
+                continue
+
+            page_words_lower = set(re.findall(r"\w+", p_text.lower()))
+            overlap = len(set(query_words) & page_words_lower)
+
+            if overlap > best_overlap_count:
+                best_overlap_count = overlap
+                best_page = p_num
+                for qw in query_words:
+                    if qw in page_words_lower:
+                        m = re.search(rf"\b{re.escape(qw)}\b", p_text, re.IGNORECASE)
+                        if m:
+                            best_term = p_text[m.start():m.end()]
+                            start = max(0, m.start() - 80)
+                            end = min(len(p_text), m.end() + 120)
+                            best_snippet = re.sub(r"\s+", " ", p_text[start:end]).strip()
+                            break
+
+        if best_overlap_count > 0:
+            return {
+                "page_number": best_page,
+                "match_type": "partial",
+                "highlight_term": best_term or query_words[0],
+                "match_count": best_overlap_count,
+                "snippet": best_snippet or extract_best_snippet(full_text, cleaned_query),
+            }
+
+    # 3. Pure semantic match (no lexical overlap)
+    return {
+        "page_number": 1,
+        "match_type": "semantic",
+        "highlight_term": None,
+        "match_count": 0,
+        "snippet": extract_best_snippet(full_text, cleaned_query) if full_text else "",
+    }
 
 
 def load_cluster_assignments(
@@ -248,7 +391,6 @@ def search_corpus(
         model = load_model()
 
     # 2. Compute query embedding (unit normalized)
-    # Using sentence-transformers encode with normalize_embeddings=True
     query_vec = model.encode([cleaned_query], normalize_embeddings=True)
     if hasattr(query_vec, "ndim") and query_vec.ndim == 2:
         query_vec = query_vec[0]
@@ -296,18 +438,22 @@ def search_corpus(
         similarity = float(np.dot(doc_vec, query_vec))
         similarity = float(np.clip(similarity, -1.0, 1.0))
 
-        cluster_id = doc_cluster_map.get(doc_id, "cluster-unassigned")
-        if cluster_id.startswith("noise-"):
+        raw_cid = doc_cluster_map.get(doc_id, "noise")
+        if raw_cid.startswith("noise-") or raw_cid in ("noise", "cluster-unassigned", "unassigned"):
             cluster_id = "noise"
-
-        # Topic label
-        topic_info = topic_metadata.get(cluster_id, {}) if topic_metadata else {}
-        if cluster_id == "noise":
-            topic_label = "Outliers"
+            topic_label = "Outlier"
         else:
+            cluster_id = raw_cid
+            topic_info = topic_metadata.get(cluster_id, {}) if topic_metadata else {}
             topic_label = topic_info.get("topic_label", f"Topic {cluster_id.replace('cluster-', '')[:6]}")
 
-        snippet = extract_best_snippet(text or "", cleaned_query)
+        # Deterministic match location & highlight metadata
+        loc = find_match_location(pdf_path, cleaned_query, full_text=text or "")
+        snippet = loc.get("snippet") or extract_best_snippet(text or "", cleaned_query)
+        page_number = loc.get("page_number", 1)
+        match_type = loc.get("match_type", "semantic")
+        highlight_term = loc.get("highlight_term")
+        match_count = loc.get("match_count", 0)
 
         scored_docs.append({
             "doc_id": doc_id,
@@ -316,6 +462,10 @@ def search_corpus(
             "cluster_id": cluster_id,
             "topic_label": topic_label,
             "snippet": snippet,
+            "page_number": page_number,
+            "match_type": match_type,
+            "highlight_term": highlight_term,
+            "match_count": match_count,
         })
 
     # Sort descending by similarity
@@ -333,6 +483,10 @@ def search_corpus(
                 topic_label=doc["topic_label"],
                 snippet=doc["snippet"],
                 rank=rank,
+                page_number=doc["page_number"],
+                match_type=doc["match_type"],
+                highlight_term=doc["highlight_term"],
+                match_count=doc["match_count"],
             )
         )
 

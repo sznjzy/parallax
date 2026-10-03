@@ -39,27 +39,39 @@ class EmbeddingOutput:
     source_type: str  # "pdf" | "text" | "query"
 
 
-def extract_text_from_pdf(pdf_path: Path) -> str:
+def extract_pages_from_pdf(pdf_path: Path) -> list[dict[str, Any]]:
     """
-    Extract text from a PDF, logging failures explicitly.
-    Returns empty string on failure — caller is responsible for tracking skipped files.
-    (embedding-pipeline SKILL.md: do NOT silently drop — surface the failure upstream)
+    Extract text page-by-page from a PDF, logging failures explicitly.
+    Returns list of dicts: [{"page_number": 1, "text": "..."}, ...] (1-indexed).
+    Returns empty list on failure — caller is responsible for handling errors.
     """
-    text_chunks = []
+    pages: list[dict[str, Any]] = []
     try:
         if pypdf is None:
             raise ImportError("pypdf is not installed")
 
         with open(pdf_path, "rb") as f:
             reader = pypdf.PdfReader(f)
-            for page in reader.pages:
-                text = page.extract_text()
-                if text:
-                    text_chunks.append(text)
-        return "\n\n".join(text_chunks)
+            for idx, page in enumerate(reader.pages):
+                text = page.extract_text() or ""
+                pages.append({"page_number": idx + 1, "text": text})
+        return pages
     except Exception as e:
         print(f"  [FAIL] Could not parse PDF {pdf_path.name}: {e}")
+        return []
+
+
+def extract_text_from_pdf(pdf_path: Path) -> str:
+    """
+    Extract text from a PDF, logging failures explicitly.
+    Returns empty string on failure — caller is responsible for tracking skipped files.
+    (embedding-pipeline SKILL.md: do NOT silently drop — surface the failure upstream)
+    """
+    pages = extract_pages_from_pdf(pdf_path)
+    if not pages:
         return ""
+    non_empty = [p["text"] for p in pages if p["text"].strip()]
+    return "\n\n".join(non_empty)
 
 
 def chunk_text(text: str, max_words: int = 400) -> list[str]:

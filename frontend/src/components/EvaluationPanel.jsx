@@ -102,14 +102,26 @@ export default function EvaluationPanel() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
               {state.searchResults.results.map((res) => {
                 const isSelected = state.selectedDocId === res.doc_id
-                const clr = clusterColor(res.cluster_id)
+                const isOutlier = res.cluster_id === 'noise' || res.cluster_id.startsWith('noise-') || res.cluster_id === 'unassigned' || res.cluster_id === 'cluster-unassigned'
+                const clr = isOutlier ? 'var(--color-text-muted)' : clusterColor(res.cluster_id)
                 const pct = Math.round(res.similarity_score * 100)
-                const shortCid = res.cluster_id.replace('cluster-', '').slice(0, 6)
+                const shortCid = isOutlier ? 'Outlier' : res.cluster_id.replace('cluster-', '').slice(0, 6)
+                const displayTopic = isOutlier ? 'Outlier' : res.topic_label
 
                 return (
                   <div
                     key={res.doc_id}
-                    onClick={() => dispatch({ type: 'SELECT_NODE', doc_id: res.doc_id })}
+                    onClick={() => {
+                      dispatch({ type: 'SELECT_NODE', doc_id: res.doc_id })
+                      dispatch({
+                        type: 'VIEW_DOCUMENT',
+                        filename: res.filename,
+                        doc_id: res.doc_id,
+                        page: res.page_number || 1,
+                        highlightTerm: res.highlight_term || (res.match_type === 'exact' ? state.searchResults?.query : null),
+                        searchMatch: res,
+                      })
+                    }}
                     style={{
                       padding: '6px 8px',
                       borderRadius: 'var(--radius-sm)',
@@ -121,6 +133,7 @@ export default function EvaluationPanel() {
                       gap: 4,
                       transition: 'all 0.15s ease',
                     }}
+                    title={`Click to open ${res.filename} at Page ${res.page_number || 1}`}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
@@ -162,20 +175,38 @@ export default function EvaluationPanel() {
                           fontSize: '0.58rem',
                           padding: '0 4px',
                           borderRadius: 3,
-                          background: `${clr}18`,
-                          color: clr,
-                          border: `1px solid ${clr}40`,
+                          background: isOutlier ? 'var(--color-surface-2)' : `${clr}18`,
+                          color: isOutlier ? 'var(--color-text-muted)' : clr,
+                          border: `1px solid ${isOutlier ? 'var(--color-border)' : `${clr}40`}`,
                           fontFamily: 'var(--font-mono)',
+                          fontWeight: isOutlier ? 600 : 400,
                         }}
                       >
                         {shortCid}
                       </span>
                       <span
                         className="truncate"
-                        style={{ fontSize: '0.62rem', color: 'var(--color-text-subtle)' }}
+                        style={{ fontSize: '0.62rem', color: 'var(--color-text-subtle)', flex: 1 }}
                       >
-                        {res.topic_label}
+                        {displayTopic}
                       </span>
+                      {res.page_number && (
+                        <span
+                          style={{
+                            fontSize: '0.58rem',
+                            padding: '0 4px',
+                            borderRadius: 3,
+                            background: res.match_type === 'exact' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(88, 166, 255, 0.15)',
+                            color: res.match_type === 'exact' ? '#22c55e' : 'var(--color-accent)',
+                            border: `1px solid ${res.match_type === 'exact' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(88, 166, 255, 0.3)'}`,
+                            fontFamily: 'var(--font-mono)',
+                            flexShrink: 0,
+                          }}
+                          title={res.match_type === 'exact' ? `Exact match on Page ${res.page_number} (${res.match_count} occurrences)` : `Page ${res.page_number}`}
+                        >
+                          P.{res.page_number}
+                        </span>
+                      )}
                     </div>
 
                     {res.snippet && (

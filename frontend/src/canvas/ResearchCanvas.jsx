@@ -366,11 +366,21 @@ export default function ResearchCanvas({ onConstraintAdded }) {
                   node.cluster_id !== selectedClusterId &&
                   node.doc_id !== state.selectedDocId
                 }
-                isPinned={constrainedDocIds.has(node.doc_id)}
                 searchActive={state.searchActive}
                 searchResult={searchResultsMap?.[node.doc_id]}
                 onSelect={handleSelect}
-                onOpenPdf={(doc_id) => dispatch({ type: 'VIEW_DOCUMENT', doc_id })}
+                onOpenPdf={(doc_id) => {
+                  const match = searchResultsMap?.[doc_id]
+                  const filename = doc_id.replace(/^doc-/, '')
+                  dispatch({
+                    type: 'VIEW_DOCUMENT',
+                    filename,
+                    doc_id,
+                    page: match?.page_number || 1,
+                    highlightTerm: match?.highlight_term || (match?.match_type === 'exact' ? state.searchResults?.query : null),
+                    searchMatch: match || null,
+                  })
+                }}
                 onHover={handleHover}
                 onDragMove={handleDragMove}
                 onDragEnd={handleDragEnd}

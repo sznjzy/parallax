@@ -1,20 +1,55 @@
 /**
  * PdfViewerModal.jsx
  *
- * Full-featured in-browser PDF reader modal.
- * Opens when a user selects a node and chooses "Open PDF", double-clicks a node,
- * or clicks the view icon next to a paper in the documents list.
+ * Full-featured in-browser PDF reader modal with deterministic search-to-highlight navigation.
+ * Opens when a user clicks a search result in the sidebar, selects a node and chooses
+ * "Open PDF", double-clicks a canvas node, or clicks view in the documents list.
  *
  * Capabilities:
- *  - Native in-browser PDF rendering inside an iframe/embed
- *  - Direct "Open in New Tab" button (opens in the same browser in a new tab)
+ *  - Native in-browser PDF rendering with standard URL fragment `#page=N&search=phrase`
+ *  - Deterministic page jumping and query highlighting
+ *  - Grounded match excerpt banner with visual highlight
+ *  - Direct "Open in New Tab" button preserving page & search query parameters
  *  - "Download PDF" button
- *  - Quick cluster tag indicator
+ *  - Outlier / Cluster tag indicator
  *  - Keyboard shortcut (ESC) to dismiss
  */
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../state/AppContext'
 import { clusterColor } from '../canvas/clusterColor'
+
+function HighlightedSnippet({ text, term, query }) {
+  if (!text) return null
+  const target = term || query
+  if (!target || !target.trim()) return <span>{text}</span>
+
+  const escaped = target.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+
+  return (
+    <span>
+      {parts.map((part, i) =>
+        part.toLowerCase() === target.trim().toLowerCase() ? (
+          <mark
+            key={i}
+            style={{
+              background: 'rgba(250, 204, 21, 0.4)',
+              color: '#fef08a',
+              padding: '1px 4px',
+              borderRadius: 3,
+              fontWeight: 700,
+              border: '1px solid rgba(250, 204, 21, 0.6)',
+            }}
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </span>
+  )
+}
 
 export default function PdfViewerModal() {
   const { state, dispatch } = useApp()
@@ -26,7 +61,14 @@ export default function PdfViewerModal() {
     n => n.doc_id === filename || n.doc_id === `doc-${filename}` || n.doc_id.replace(/^doc-/, '') === filename
   )
   const clusterId = matchingNode?.cluster_id
+  const isOutlier = clusterId ? (
+    clusterId.startsWith('noise-') || clusterId === 'noise' || clusterId === 'unassigned' || clusterId === 'cluster-unassigned'
+  ) : false
   const color = clusterId ? clusterColor(clusterId) : 'var(--color-accent)'
+
+  const match = state.viewerMatch
+  const page = state.viewerPage || match?.page_number || 1
+  const highlight = state.viewerHighlight || match?.highlight_term || (match?.match_type === 'exact' ? state.searchResults?.query : null)
 
   // Close on Escape key
   useEffect(() => {
@@ -40,14 +82,22 @@ export default function PdfViewerModal() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [filename, dispatch])
 
-  // Reset loading spinner on filename change
+  // Reset loading spinner on filename or page change
   useEffect(() => {
     setIsLoading(true)
-  }, [filename])
+  }, [filename, page, highlight])
 
   if (!filename) return null
 
-  const pdfUrl = `/api/documents/${encodeURIComponent(filename)}/pdf`
+  const basePdfUrl = `/api/documents/${encodeURIComponent(filename)}/pdf`
+  const hashParts = []
+  if (page && page > 1) {
+    hashParts.push(`page=${page}`)
+  }
+  if (highlight) {
+    hashParts.push(`search=${encodeURIComponent(highlight)}`)
+  }
+  const pdfUrl = hashParts.length > 0 ? `${basePdfUrl}#${hashParts.join('&')}` : basePdfUrl
   const displayName = filename.replace(/^doc-/, '')
 
   return (
@@ -70,26 +120,42 @@ export default function PdfViewerModal() {
               <PdfIcon />
             </div>
             <div className="pdf-modal-info">
-              <h2 id="pdf-modal-title" className="pdf-modal-filename" title={displayName}>
-                {displayName}
-              </h2>
-              {clusterId && (
-                <span
-                  className="badge"
-                  style={{
-                    fontSize: '0.7rem',
-                    padding: '1px 7px',
-                    background: clusterId.startsWith('noise-') ? 'var(--color-surface-2)' : `${color}18`,
-                    color: clusterId.startsWith('noise-') ? 'var(--color-text-muted)' : color,
-                    borderColor: clusterId.startsWith('noise-') ? 'var(--color-border)' : `${color}40`,
-                    fontFamily: 'var(--font-mono)',
-                    marginTop: 3,
-                    alignSelf: 'flex-start',
-                  }}
-                >
-                  {clusterId.startsWith('noise-') ? 'Noise outlier' : clusterId}
-                </span>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <h2 id="pdf-modal-title" className="pdf-modal-filename" title={displayName} style={{ margin: 0 }}>
+                  {displayName}
+                </h2>
+                {clusterId && (
+                  <span
+                    className="badge"
+                    style={{
+                      fontSize: '0.68rem',
+                      padding: '1px 7px',
+                      background: isOutlier ? 'var(--color-surface-2)' : `${color}18`,
+                      color: isOutlier ? 'var(--color-text-muted)' : color,
+                      borderColor: isOutlier ? 'var(--color-border)' : `${color}40`,
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: isOutlier ? 600 : 400,
+                    }}
+                  >
+                    {isOutlier ? 'Outlier' : clusterId}
+                  </span>
+                )}
+                {match && (
+                  <span
+                    className="badge"
+                    style={{
+                      fontSize: '0.68rem',
+                      padding: '1px 7px',
+                      background: match.match_type === 'exact' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(88, 166, 255, 0.15)',
+                      color: match.match_type === 'exact' ? '#22c55e' : 'var(--color-accent)',
+                      borderColor: match.match_type === 'exact' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(88, 166, 255, 0.3)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    #{match.rank} Match • {Math.round(match.similarity_score * 100)}% Relevance
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -100,7 +166,7 @@ export default function PdfViewerModal() {
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-ghost btn-sm"
-              title="Open PDF in a new browser tab"
+              title="Open PDF in a new browser tab with page and search parameters"
               id="btn-open-pdf-tab"
             >
               <ExternalLinkIcon />
@@ -109,7 +175,7 @@ export default function PdfViewerModal() {
 
             {/* Download */}
             <a
-              href={pdfUrl}
+              href={basePdfUrl}
               download={displayName}
               className="btn btn-ghost btn-sm"
               title="Download PDF"
@@ -131,16 +197,85 @@ export default function PdfViewerModal() {
           </div>
         </div>
 
+        {/* Search Match Highlight Excerpt Banner */}
+        {match && (
+          <div
+            style={{
+              padding: '8px 16px',
+              background: 'rgba(88, 166, 255, 0.08)',
+              borderBottom: '1px solid var(--color-border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              fontSize: '0.78rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span
+                  style={{
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    padding: '1px 6px',
+                    borderRadius: 3,
+                    background: match.match_type === 'exact' ? '#22c55e' : 'var(--color-accent)',
+                    color: '#0d1117',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                >
+                  {match.match_type === 'exact' ? 'Exact Match' : match.match_type === 'partial' ? 'Keyword Match' : 'Semantic Match'}
+                </span>
+                <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>
+                  Page {page}
+                </span>
+                {match.match_count > 0 && (
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
+                    ({match.match_count} {match.match_count === 1 ? 'occurrence' : 'occurrences'} in document)
+                  </span>
+                )}
+              </div>
+              {(highlight || state.searchResults?.query) && (
+                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', fontStyle: 'italic' }}>
+                  Query: &ldquo;{state.searchResults?.query || highlight}&rdquo;
+                </span>
+              )}
+            </div>
+
+            {match.snippet && (
+              <div
+                style={{
+                  color: 'var(--color-text-subtle)',
+                  fontSize: '0.74rem',
+                  lineHeight: 1.4,
+                  marginTop: 2,
+                  fontFamily: 'var(--font-sans)',
+                }}
+              >
+                &ldquo;
+                <HighlightedSnippet
+                  text={match.snippet}
+                  term={match.highlight_term}
+                  query={state.searchResults?.query}
+                />
+                &rdquo;
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Modal Body / Viewer */}
         <div className="pdf-modal-body">
           {isLoading && (
             <div className="pdf-loading-overlay">
               <div className="pdf-spinner" />
-              <span>Loading {displayName}…</span>
+              <span>Loading {displayName} (Page {page})…</span>
             </div>
           )}
 
           <iframe
+            key={pdfUrl}
             src={pdfUrl}
             title={`PDF Document: ${displayName}`}
             className="pdf-iframe"

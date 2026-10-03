@@ -194,16 +194,96 @@ class TestSemanticSearch(unittest.TestCase):
         # Verify PDF untouched
         self.assertEqual(pdf_p.read_bytes(), pdf_bytes)
 
-    def test_extract_best_snippet(self):
-        """Snippet extractor chooses sentence with highest lexical overlap."""
-        text = (
-            "We present an introduction to computer systems. "
-            "In this work, we propose graph neural networks for molecular property prediction. "
-            "Finally, conclusion discusses future directions."
+    def test_outlier_label_presentation(self):
+        """Noise / outlier documents must receive 'Outlier' label and 'noise' cluster_id."""
+        from backend.embeddings.embedding_cache import save_cached_embedding, save_cached_text
+        pdf_p = self.temp_dir / "outlier_paper.pdf"
+        pdf_p.write_bytes(b"%PDF-1.4 outlier content")
+        v = self.mock_model.encode(["unusual anomaly outlier research"])[0]
+        save_cached_embedding(pdf_p, v)
+        save_cached_text(pdf_p, "This is an isolated outlier paper with no cluster peers.")
+
+        # Test with noise cluster mapping
+        cluster_mapping = {"doc-outlier_paper.pdf": "noise-isolated-uuid"}
+        self.state_file.write_text(json.dumps(cluster_mapping), encoding="utf-8")
+
+        res = search_corpus(
+            query="outlier",
+            corpus_dir=self.temp_dir,
+            model=self.mock_model,
+            state_file=self.state_file,
         )
-        snippet = extract_best_snippet(text, "graph neural networks molecular property")
-        self.assertIn("graph neural networks", snippet)
-        self.assertIn("molecular property", snippet)
+        self.assertEqual(len(res["results"]), 1)
+        r = res["results"][0]
+        self.assertEqual(r["cluster_id"], "noise")
+        self.assertEqual(r["topic_label"], "Outlier")
+
+    def test_normal_clustered_result_preserves_cluster_and_topic(self):
+        """Normal clustered documents must retain their actual cluster ID and assigned topic label."""
+        from backend.embeddings.embedding_cache import save_cached_embedding, save_cached_text
+        pdf_p = self.temp_dir / "clustered_paper.pdf"
+        pdf_p.write_bytes(b"%PDF-1.4 clustered content")
+        v = self.mock_model.encode(["deep transformer models"])[0]
+        save_cached_embedding(pdf_p, v)
+        save_cached_text(pdf_p, "Transformer architecture self-attention mechanism.")
+
+        cluster_mapping = {"doc-clustered_paper.pdf": "cluster-3a1b72"}
+        self.state_file.write_text(json.dumps(cluster_mapping), encoding="utf-8")
+
+        res = search_corpus(
+            query="transformer",
+            corpus_dir=self.temp_dir,
+            model=self.mock_model,
+            state_file=self.state_file,
+            topic_metadata={"cluster-3a1b72": {"topic_label": "Attention Mechanisms"}},
+        )
+        self.assertEqual(len(res["results"]), 1)
+        r = res["results"][0]
+        self.assertEqual(r["cluster_id"], "cluster-3a1b72")
+        self.assertEqual(r["topic_label"], "Attention Mechanisms")
+
+    def test_find_match_location_exact_and_semantic(self):
+        """find_match_location correctly identifies page numbers, match types, and highlight terms."""
+        from backend.search.semantic_search import find_match_location
+        # Test on existing sample docs if available
+        sample_p34 = Path("data/sample_docs/paper34.pdf")
+        if sample_p34.exists():
+            loc_p34 = find_match_location(sample_p34, "cooking")
+            self.assertEqual(loc_p34["match_type"], "exact")
+            self.assertEqual(loc_p34["page_number"], 1)
+            self.assertEqual(loc_p34["highlight_term"].lower(), "cooking")
+            self.assertGreater(loc_p34["match_count"], 0)
+            self.assertIn("cooking", loc_p34["snippet"].lower())
+
+        sample_p10 = Path("data/sample_docs/paper10.pdf")
+        if sample_p10.exists():
+            loc_p10 = find_match_location(sample_p10, "rendering")
+            self.assertEqual(loc_p10["match_type"], "exact")
+            self.assertEqual(loc_p10["page_number"], 3)
+            self.assertEqual(loc_p10["highlight_term"].lower(), "rendering")
+
+    def test_generic_search_metadata_structure(self):
+        """Search results contain all required metadata fields for document viewer navigation."""
+        from backend.embeddings.embedding_cache import save_cached_embedding, save_cached_text
+        pdf_p = self.temp_dir / "paper_test.pdf"
+        pdf_p.write_bytes(b"%PDF-1.4 content")
+        v = self.mock_model.encode(["machine learning optimization"])[0]
+        save_cached_embedding(pdf_p, v)
+        save_cached_text(pdf_p, "Stochastic gradient descent for machine learning optimization.")
+
+        res = search_corpus("optimization", corpus_dir=self.temp_dir, model=self.mock_model)
+        r = res["results"][0]
+        self.assertIn("doc_id", r)
+        self.assertIn("filename", r)
+        self.assertIn("similarity_score", r)
+        self.assertIn("cluster_id", r)
+        self.assertIn("topic_label", r)
+        self.assertIn("snippet", r)
+        self.assertIn("rank", r)
+        self.assertIn("page_number", r)
+        self.assertIn("match_type", r)
+        self.assertIn("highlight_term", r)
+        self.assertIn("match_count", r)
 
 
 class TestSearchApiEndpoint(unittest.TestCase):
@@ -223,6 +303,11 @@ class TestSearchApiEndpoint(unittest.TestCase):
         self.assertIn("cluster_relevance", data)
         self.assertIn("query_embedding_dim", data)
         self.assertEqual(data["query_embedding_dim"], 768)
+
+        if data["results"]:
+            first = data["results"][0]
+            self.assertIn("page_number", first)
+            self.assertIn("match_type", first)
 
     def test_api_search_endpoint_empty_query_400(self):
         """POST /api/search with empty query returns 400 Bad Request."""
