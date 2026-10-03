@@ -85,7 +85,7 @@ export default function SelectedNodeBar() {
                   fontFamily: 'var(--font-mono)',
                 }}
               >
-                {Math.round(match.similarity_score * 100)}% Match{match.page_number ? ` • P.${match.page_number}` : ''}
+                {Math.round(match.similarity_score * 100)}% Match{match.page_number ? ` • Page ${match.page_number}` : ''}
               </span>
             )}
             {node.is_boundary_document && (

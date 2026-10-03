@@ -206,14 +206,45 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
   transition: width var(--transition-base), min-width var(--transition-base);
   z-index: 10;
 }
 
+.app-sidebar.resizing {
+  transition: none !important;
+}
+
 .app-sidebar.collapsed {
-  width: 0;
-  min-width: 0;
+  width: 0 !important;
+  min-width: 0 !important;
   border-right: none;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--transition-fast);
+  z-index: 20;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.is-resizing {
+  background: var(--color-accent);
+}
+
+.evaluation-panel-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sidebar-header {

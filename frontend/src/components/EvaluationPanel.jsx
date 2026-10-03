@@ -61,7 +61,7 @@ export default function EvaluationPanel() {
   const noneSelected = selectedCount === 0
 
   return (
-    <aside className="app-sidebar" id="evaluation-panel" aria-label="Evaluation metrics">
+    <aside className="evaluation-panel-content" id="evaluation-panel" aria-label="Evaluation metrics">
       <div className="sidebar-header">
         <span className="sidebar-title">Metrics</span>
         {state.mockMode && (
@@ -99,7 +99,7 @@ export default function EvaluationPanel() {
               Query: &ldquo;{state.searchResults.query}&rdquo;
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
               {state.searchResults.results.map((res) => {
                 const isSelected = state.selectedDocId === res.doc_id
                 const isOutlier = res.cluster_id === 'noise' || res.cluster_id.startsWith('noise-') || res.cluster_id === 'unassigned' || res.cluster_id === 'cluster-unassigned'
@@ -133,7 +133,7 @@ export default function EvaluationPanel() {
                       gap: 4,
                       transition: 'all 0.15s ease',
                     }}
-                    title={`Click to open ${res.filename} at Page ${res.page_number || 1}`}
+                    title={res.match_type === 'exact' ? `Exact match on Page ${res.page_number}` : `Semantic match (cosine similarity: ${pct}%)`}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
@@ -190,21 +190,55 @@ export default function EvaluationPanel() {
                       >
                         {displayTopic}
                       </span>
-                      {res.page_number && (
+                      {res.match_type === 'exact' ? (
                         <span
                           style={{
                             fontSize: '0.58rem',
-                            padding: '0 4px',
+                            padding: '1px 5px',
                             borderRadius: 3,
-                            background: res.match_type === 'exact' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(88, 166, 255, 0.15)',
-                            color: res.match_type === 'exact' ? '#22c55e' : 'var(--color-accent)',
-                            border: `1px solid ${res.match_type === 'exact' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(88, 166, 255, 0.3)'}`,
+                            background: 'rgba(34, 197, 94, 0.15)',
+                            color: '#22c55e',
+                            border: '1px solid rgba(34, 197, 94, 0.3)',
+                            fontFamily: 'var(--font-mono)',
+                            flexShrink: 0,
+                            fontWeight: 600,
+                          }}
+                          title={`Exact match found on Page ${res.page_number} (${res.match_count} occurrences)`}
+                        >
+                          Exact • Pg {res.page_number}
+                        </span>
+                      ) : res.match_type === 'partial' ? (
+                        <span
+                          style={{
+                            fontSize: '0.58rem',
+                            padding: '1px 5px',
+                            borderRadius: 3,
+                            background: 'rgba(217, 119, 6, 0.15)',
+                            color: '#d97706',
+                            border: '1px solid rgba(217, 119, 6, 0.3)',
+                            fontFamily: 'var(--font-mono)',
+                            flexShrink: 0,
+                            fontWeight: 600,
+                          }}
+                          title={`Keyword match on Page ${res.page_number}`}
+                        >
+                          Keyword • Pg {res.page_number}
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: '0.58rem',
+                            padding: '1px 5px',
+                            borderRadius: 3,
+                            background: 'rgba(88, 166, 255, 0.12)',
+                            color: 'var(--color-accent)',
+                            border: '1px solid rgba(88, 166, 255, 0.25)',
                             fontFamily: 'var(--font-mono)',
                             flexShrink: 0,
                           }}
-                          title={res.match_type === 'exact' ? `Exact match on Page ${res.page_number} (${res.match_count} occurrences)` : `Page ${res.page_number}`}
+                          title="Semantic vector similarity match (concept relatedness)"
                         >
-                          P.{res.page_number}
+                          Semantic
                         </span>
                       )}
                     </div>

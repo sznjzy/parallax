@@ -71,8 +71,47 @@ export default function App() {
     showToast({ docId: doc_id, clusterId: cluster_id })
   }, [showToast])
 
-  // ── Sidebar collapsed state ────────────────────────────────────────
+  // ── Sidebar collapsed state & resizable width ───────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('parallax-sidebar-width')
+    return saved ? parseInt(saved, 10) : 280
+  })
+  const [isResizing, setIsResizing] = useState(false)
+
+  const startResizing = useCallback((e) => {
+    e.preventDefault()
+    setIsResizing(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isResizing) return
+
+    const handleMouseMove = (e) => {
+      const newWidth = Math.max(220, Math.min(650, e.clientX))
+      setSidebarWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      setSidebarWidth((w) => {
+        localStorage.setItem('parallax-sidebar-width', w.toString())
+        return w
+      })
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizing])
 
   return (
     <div className="app-shell" data-theme={state.theme}>
@@ -123,8 +162,18 @@ export default function App() {
       {/* ── Main body ────────────────────────────────────────────── */}
       <div className="app-body">
         {/* Left sidebar */}
-        <div className={`app-sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
+        <div
+          className={`app-sidebar ${sidebarOpen ? '' : 'collapsed'} ${isResizing ? 'resizing' : ''}`}
+          style={sidebarOpen ? { width: sidebarWidth, minWidth: sidebarWidth } : {}}
+        >
           <EvaluationPanel />
+          {sidebarOpen && (
+            <div
+              className={`sidebar-resizer ${isResizing ? 'is-resizing' : ''}`}
+              onMouseDown={startResizing}
+              title="Drag to resize sidebar"
+            />
+          )}
         </div>
 
         {/* Canvas area */}
