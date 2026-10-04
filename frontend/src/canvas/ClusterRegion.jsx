@@ -13,9 +13,8 @@
  *   isSelected    boolean    highlight when a sibling node is selected
  *   isDragTarget  boolean    pulsing/bold highlight when user is dragging a node over this cluster
  */
-import React from 'react'
+import React, { memo, useMemo } from 'react'
 import { Group, Line, Circle, Rect, Text } from 'react-konva'
-import { useApp } from '../state/AppContext'
 import { clusterColor } from './clusterColor'
 
 const PADDING = 24 // outward offset in px
@@ -102,7 +101,7 @@ function expandHull(hull, cx, cy, padding = PADDING) {
   })
 }
 
-export default function ClusterRegion({
+function ClusterRegion({
   cluster_id,
   nodes,
   scale,
@@ -110,19 +109,42 @@ export default function ClusterRegion({
   isDragTarget,
   searchActive,
   clusterRelevance,
+  topicTitle,
+  isDark = true,
 }) {
-  const { state } = useApp()
-
   // Skip noise pseudo-clusters
   if (cluster_id.startsWith('noise-')) return null
 
-  const clusterNodes = nodes.filter(n => n.cluster_id === cluster_id)
-  if (clusterNodes.length === 0) return null
+  const clusterNodes = useMemo(() => {
+    return nodes.filter(n => n.cluster_id === cluster_id)
+  }, [nodes, cluster_id])
 
-  const pts = clusterNodes.map(n => ({ x: n.x * scale, y: n.y * scale }))
-  const cx = pts.reduce((sum, p) => sum + p.x, 0) / pts.length
-  const cy = pts.reduce((sum, p) => sum + p.y, 0) / pts.length
+  // Coordinate signature for memoizing geometric hull calculations
+  const coordKey = useMemo(() => {
+    return clusterNodes.map(n => `${n.x.toFixed(2)},${n.y.toFixed(2)}`).join(';')
+  }, [clusterNodes])
 
+  const hullData = useMemo(() => {
+    if (clusterNodes.length === 0) return null
+    const pts = clusterNodes.map(n => ({ x: n.x * scale, y: n.y * scale }))
+    const cx = pts.reduce((sum, p) => sum + p.x, 0) / pts.length
+    const cy = pts.reduce((sum, p) => sum + p.y, 0) / pts.length
+
+    if (pts.length === 1) {
+      return { type: 'circle', cx, cy, pts }
+    }
+
+    const rawHull = pts.length === 2 ? pts : convexHull(pts)
+    const expanded = expandHull(rawHull, cx, cy, PADDING)
+    const flatPoints = expanded.flatMap(p => [p.x, p.y])
+    const minY = Math.min(...expanded.map(p => p.y))
+
+    return { type: 'hull', cx, cy, flatPoints, minY }
+  }, [coordKey, scale, clusterNodes.length])
+
+  if (!hullData) return null
+
+  const { cx, cy } = hullData
   const color = clusterColor(cluster_id)
 
   // Search relevance calculations (Phase 6)
@@ -148,16 +170,14 @@ export default function ClusterRegion({
   }
 
   const isHighlighted = isSelected || isDragTarget || isRelevantCluster
-
   const shortClusterLabel = cluster_id.replace(/^cluster-/, '').slice(0, 6)
-  const topicMeta = state?.topics?.[cluster_id]
-  const displayTitle = topicMeta?.topic_label || `Topic ${shortClusterLabel}`
-  const labelText = searchActive && isRelevantCluster
-    ? `${displayTitle} · ${Math.round(maxSim * 100)}% rel`
-    : `${displayTitle} · ${clusterNodes.length}`
+  const displayTitle = topicTitle || `Topic ${shortClusterLabel}`
+  const countSubtitle = searchActive && isRelevantCluster
+    ? `${Math.round(maxSim * 100)}% relevance`
+    : `${clusterNodes.length} ${clusterNodes.length === 1 ? 'document' : 'documents'}`
 
   // 1 Node special case: circle
-  if (pts.length === 1) {
+  if (hullData.type === 'circle') {
     const r = 32
     return (
       <Group listening={false}>
@@ -179,24 +199,25 @@ export default function ClusterRegion({
           dash={isDragTarget ? [4, 2] : [6, 4]}
           listening={false}
         />
-        <CentroidBadge cx={cx} cy={cy - r - 12} text={labelText} color={color} isHighlighted={isHighlighted} />
+        <ScientificClusterAnnotation
+          cx={cx}
+          cy={cy - r - 20}
+          title={displayTitle}
+          subtitle={countSubtitle}
+          color={color}
+          isHighlighted={isHighlighted}
+          isDark={isDark}
+        />
       </Group>
     )
   }
 
   // 2+ Nodes: Convex hull
-  const rawHull = pts.length === 2 ? pts : convexHull(pts)
-  const expanded = expandHull(rawHull, cx, cy, PADDING)
-  const flatPoints = expanded.flatMap(p => [p.x, p.y])
-
-  // Compute top-most point for badge position
-  const minY = Math.min(...expanded.map(p => p.y))
-
   return (
     <Group listening={false}>
       {/* Smooth Hull Region Fill & Stroke */}
       <Line
-        points={flatPoints}
+        points={hullData.flatPoints}
         closed
         tension={0.35}
         fill={color}
@@ -207,38 +228,99 @@ export default function ClusterRegion({
         listening={false}
       />
 
-      {/* Centroid Label Badge */}
-      <CentroidBadge cx={cx} cy={minY - 14} text={labelText} color={color} isHighlighted={isHighlighted} />
+      {/* Scientific Floating Cluster Annotation */}
+      <ScientificClusterAnnotation
+        cx={cx}
+        cy={hullData.minY - 24}
+        title={displayTitle}
+        subtitle={countSubtitle}
+        color={color}
+        isHighlighted={isHighlighted}
+        isDark={isDark}
+      />
     </Group>
   )
 }
 
-function CentroidBadge({ cx, cy, text, color, isHighlighted }) {
-  const badgeWidth = text.length * 6 + 18
-  const badgeHeight = 16
+function areClusterRegionPropsEqual(prev, next) {
+  if (
+    prev.cluster_id !== next.cluster_id ||
+    prev.scale !== next.scale ||
+    prev.isSelected !== next.isSelected ||
+    prev.isDragTarget !== next.isDragTarget ||
+    prev.searchActive !== next.searchActive ||
+    prev.clusterRelevance !== next.clusterRelevance ||
+    prev.topicTitle !== next.topicTitle ||
+    prev.isDark !== next.isDark
+  ) {
+    return false
+  }
+
+  // Check if any member node in this cluster changed coordinates or membership
+  const prevNodes = prev.nodes.filter(n => n.cluster_id === prev.cluster_id)
+  const nextNodes = next.nodes.filter(n => n.cluster_id === next.cluster_id)
+
+  if (prevNodes.length !== nextNodes.length) return false
+
+  for (let i = 0; i < prevNodes.length; i++) {
+    if (
+      prevNodes[i].doc_id !== nextNodes[i].doc_id ||
+      prevNodes[i].x !== nextNodes[i].x ||
+      prevNodes[i].y !== nextNodes[i].y
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
+export default memo(ClusterRegion, areClusterRegionPropsEqual)
+
+function ScientificClusterAnnotation({ cx, cy, title, subtitle, color, isHighlighted, isDark }) {
+  const maxLen = Math.max(title.length, subtitle.length)
+  const boxWidth = Math.max(100, maxLen * 6.5 + 20)
+  const boxHeight = 26
+
+  const bgFill = isDark ? "rgba(11, 14, 20, 0.78)" : "rgba(255, 255, 255, 0.92)"
+  const defaultBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#cbd5e1"
+  const titleFill = isHighlighted ? color : (isDark ? "#f0f6fc" : "#0f172a")
+  const subtitleFill = isDark ? "#8b949e" : "#475569"
 
   return (
-    <Group x={cx - badgeWidth / 2} y={cy} listening={false}>
+    <Group x={cx - boxWidth / 2} y={cy} listening={false}>
+      {/* Subtle translucent backdrop */}
       <Rect
-        width={badgeWidth}
-        height={badgeHeight}
-        cornerRadius={8}
-        fill="rgba(13, 17, 23, 0.85)"
-        stroke={color}
-        strokeWidth={isHighlighted ? 1.5 : 0.8}
-        opacity={isHighlighted ? 1.0 : 0.75}
+        width={boxWidth}
+        height={boxHeight}
+        cornerRadius={5}
+        fill={bgFill}
+        stroke={isHighlighted ? color : defaultBorder}
+        strokeWidth={isHighlighted ? 1.2 : 0.8}
+        shadowColor={isDark ? "#000000" : "#64748b"}
+        shadowBlur={isDark ? 8 : 4}
+        shadowOpacity={isDark ? 0.4 : 0.12}
       />
+      {/* Topic Title */}
       <Text
-        text={text}
-        fontSize={8.5}
-        fontFamily="Inter, system-ui, sans-serif"
-        fontStyle="bold"
-        fill={color}
-        width={badgeWidth}
-        height={badgeHeight}
+        text={title}
+        fontSize={9.5}
+        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+        fontStyle="600"
+        fill={titleFill}
+        width={boxWidth}
         align="center"
-        verticalAlign="middle"
-        y={1}
+        y={4}
+      />
+      {/* Document Count Subtitle */}
+      <Text
+        text={subtitle}
+        fontSize={8}
+        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+        fill={subtitleFill}
+        width={boxWidth}
+        align="center"
+        y={15}
       />
     </Group>
   )

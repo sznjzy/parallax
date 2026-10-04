@@ -1,48 +1,55 @@
-# PARALLAX PROGRESS
+# PARALLAX IMPLEMENTATION PROGRESS
 
 This file records the actual implementation state of the Parallax repository.
 
 ## Current Phase
 
-Phase 8 — Frontend Polish + Evidence Explanation
+Phase 13 — Final Regression & Freeze
 
 ## Status
 
-READY FOR APPROVAL
+COMPLETE / FROZEN
 
 ## Completed Phases
 
-- **Phase 0 — Existing System Audit**: Audited repository structure, backend pipeline, frontend components, physics simulation, constraint mechanism, and existing test suites.
-- **Phase 1 — Fix Core Clustering + Constraint Architecture**: Implemented true constraint-aware clustering (ADR-001) in `backend/clustering/pipeline.py` via `run_constraint_aware_clustering()`. Constrained documents are separated prior to HDBSCAN, forced cluster IDs merged, global cluster centroids computed, boundary flags derived, and evaluation contracts computed.
-- **Phase 2 — Stable Cluster Identity + Layout Correctness**: Verified and hardened stable cluster UUID tracking across incremental updates with full state persistence, fixed circular shortest-arc angular relaxation in `compute_home_positions()`, and verified deterministic spatial anchoring and force-directed simulation stability.
-- **Phase 3 — Testing + Evaluation Foundation**: Established synthetic corpora generators (`backend/tests/fixtures/synthetic_corpora.py`), comprehensive automated test suites for clustering quality, constraint impact, spatial stability, and API endpoints, and replaced legacy scratch test runners with a unified test discovery runner `run_all_tests.py` (28/28 unit tests passing).
-- **Phase 4 — PDF Ingestion + Caching Hardening**: Implemented robust PDF validation (magic byte `%PDF-` checks, size limits, filename sanitization/traversal defense), content-hash SHA-256 deduplication, automatic text chunking and immediate `.npy` disk caching in `backend/ingestion/ingest.py`, `POST /api/documents/upload` and `DELETE /api/documents/{filename}` endpoints, and connected UI file upload controls in `EvaluationPanel.jsx` (35/35 unit tests passing).
-- **Phase 5 — Automatic Cluster Topic Modeling**: Implemented Class-based TF-IDF (c-TF-IDF) in `backend/topics/topic_modeling.py` with optional KeyBERT semantic centroid alignment, academic stopword filtering, dynamic topic updating across constraint/corpus changes, text disk caching (`<hash>.txt`), and UI topic labels in `ClusterRegion.jsx` and `EvaluationPanel.jsx` (47/47 unit tests passing).
-- **Phase 6 — Semantic Search + Canvas Heatmap**: Implemented zero-LLM semantic search engine (`backend/search/semantic_search.py`) utilizing cached 768-dim embeddings (`all-mpnet-base-v2`) and exact cosine similarity, exposed `POST /api/search` with cluster association and aggregated cluster relevance, and added an interactive topbar SearchBar, canvas heatmap glowing halos/badges (`DocumentNode.jsx`), cluster relevance highlights (`ClusterRegion.jsx`), and ranked match sidebar (`EvaluationPanel.jsx`) (55/55 unit tests passing).
+- **Phase 0 — Baseline Audit**: Complete system structure, data flow, physics layout, and constraint pipeline audited against source code.
+- **Phase 1 — True Constraint-Aware Clustering**: Implemented `run_constraint_aware_clustering()`, separating constrained documents before HDBSCAN execution, merging forced assignments, computing global centroids and boundaries, and adding dedicated test suite `test_constraint_aware_clustering.py` (21/21 unit tests passing).
+- **Phase 2 — Stable Identity & Cyclic Relaxation**: Hardened stable cluster UUID lineage across incremental updates with full state persistence in `cluster_mapping.json`, fixed cyclic angular relaxation in `compute_home_positions()` using pairwise shortest-arc resolution, and added dedicated test suite `test_stable_identity_and_layout.py` (28/28 unit tests passing).
+- **Phase 3 — Testing & Evaluation Foundation**: Created synthetic corpora generator (`synthetic_corpora.py`), test suites for clustering quality, constraint impact, spatial stability, and API endpoints, and a unified test discovery runner `run_all_tests.py` covering 28 test cases.
+- **Phase 4 — PDF Upload & Ingestion Hardening**: Implemented production-grade PDF upload, validation, deduplication, text chunking, and immediate `.npy` disk caching in `backend/ingestion/ingest.py`, exposed `POST /api/documents/upload` and `DELETE /api/documents/{filename}`, added comprehensive test suite `test_pdf_ingestion_and_caching.py` (35/35 tests passing), and added frontend upload/delete controls.
+- **Post-Phase 4 — Outlier Spatial Isolation**: Implemented outlier spatial isolation (ADR-007): angular gap bisector anchoring for noise clusters, strong mutual noise-cluster repulsion, gravity exclusion, and geometric convex hull clearance guarantee (`ensure_outlier_hull_isolation()`), adding regression suite `test_outlier_spatial_isolation.py` (39/39 tests passing).
+- **Phase 5 — Automatic Cluster Topic Modeling**: Implemented automatic cluster topic modeling via Class-based TF-IDF (c-TF-IDF) and KeyBERT semantic centroid alignment in `backend/topics/topic_modeling.py`, added extracted text disk caching (`<sha256>.txt`), integrated topics into `run_pipeline()`, `/api/organize`, and `/api/analyze`, updated frontend `ClusterRegion.jsx` and `EvaluationPanel.jsx` to render dynamic topic titles and representative keywords, and added comprehensive test suite `test_topic_modeling.py` (47/47 tests passing).
+- **Phase 6 — Semantic Search + Canvas Heatmap**: Implemented zero-LLM semantic search engine (`backend/search/semantic_search.py`) utilizing cached 768-dim embeddings (`all-mpnet-base-v2`) and exact cosine similarity, exposed `POST /api/search` with cluster association and aggregated cluster relevance, and added an interactive topbar SearchBar, canvas glowing halo heatmap, relevance sidebar (`EvaluationPanel.jsx`) (55/55 unit tests passing).
 - **Phase 7 — Interactive Cluster Lifecycle**: Implemented interactive cluster lifecycle management (`backend/clustering/lifecycle.py`) with persistent custom topic title overrides (`PUT /api/clusters/{cluster_id}/topic`), cluster merging with document reassignment, constraint recording, and mapping cleanup (`POST /api/clusters/merge`), and cluster splitting using semantic embeddings with stable primary UUID lineage preservation (`POST /api/clusters/{cluster_id}/split`). Connected frontend lifecycle controls in `EvaluationPanel.jsx` via `useClusterLifecycle.js` (67/67 unit tests passing).
+- **Phase 8 — Frontend Redesign & Grounded Evidence Inspection**: Implemented a comprehensive 3-Zone UI architecture (Collapsible 56px→220px NavRail, Canvas Centerpiece with floating CommandBar and CanvasDock, Contextual Right Workspace Drawer with Search, Library, Clusters, Evaluation, and Document Inspector workspaces, and modal Settings). Refined Light/Dark theme text contrast, high-contrast canvas annotations, zero-reflow 60 FPS NavRail overlay, physics rerun integration with loading spinners, in-app deep-linking PDF viewer, and strict keyboard shortcut navigation without requiring generative LLMs (67/67 automated tests passing, production build verified).
+- **Phase 9 — Performance + Reliability**: Implemented React memoization across canvas components (`DocumentNode`, `ClusterRegion`), vectorized rendering transformations, and verified full interaction and physics stability (67/67 automated tests passing, clean production build).
+- **Phase 10 — Complete Evaluation**: Implemented end-to-end evaluation suite (`backend/evaluation/`) covering E1 Clustering Quality (HDBSCAN vs KMeans vs Agglomerative on synthetic and real 34-paper corpora), E2 Constraint Effectiveness (Conditions A–D with 100% satisfaction rate), E3 Incremental Stability (Stage 0 $\to$ 1 $\to$ 2 transitions), E4 Semantic Search (ground-truth evaluation across 5 queries, MRR = 1.0000), and controlled Scalability benchmarks ($N \le 500$). Generated comprehensive `EVALUATION_REPORT.md` and machine-readable `evaluation_results.json` (commit `d0ac658`).
+- **Phase 11 — Documentation & Reproducibility**: Rewrote comprehensive primary README with exact architecture pipeline, verified API references, setup instructions, honest empirical limitations, and academic terminology audit; updated PARALLAX_ARCHITECTURE.md through Phase 10; created dedicated docs/REPRODUCIBILITY.md guide; verified all 67/67 automated tests pass and clean frontend build with zero production code changes (commit `b430029`).
+- **Phase 12 — Security + Robustness**: Conducted security and robustness boundary audit across all API endpoints, request validation, filesystem operations, and state files. Hardened constraint input validation (rejecting empty/whitespace IDs with 400 Bad Request), sanitized filename handling and path traversal prevention (null byte stripping, path separator normalization, and centralized `sanitize_filename` usage in PDF streaming), verified deployment assumptions and CORS policy documentation, and added targeted regression tests (68/68 automated tests passing, clean frontend build with zero architectural changes, commit `79e8dd1`).
+- **Phase 13 — Final Regression, Release Verification & Freeze**: Conducted final full regression, release verification, and repository freeze. Verified all 68/68 backend test cases pass, verified clean frontend production build with zero errors, executed full API smoke tests across all endpoints, verified zero-LLM semantic search accuracy on ground truth queries, confirmed strict constraint validation and path traversal defenses, validated complete evaluation pipeline reproducibility against Phase 10 baseline, conducted security and dependency sanity checks, and confirmed clean working tree with zero architectural regressions.
 
 ## Current Phase Notes
 
-Phase 7 delivered complete interactive cluster lifecycle management (Rename, Merge, Split) with stable UUID lineage, persistent constraint synchronisation, and frontend UI controls. All 67 automated tests pass with 0 failures. The roadmap was scoped down to eliminate citation extraction, speculative gap radar, and standalone explorer subsystems. Phase 8 will focus on frontend polish and exposing existing measurable evidence in the UI.
+Phase 13 (Final Regression, Release Verification & Freeze) is complete. The repository is stable, reproducible, internally consistent, fully documented, and frozen. All phases (0–13) are complete.
 
 ## Phase History
 
-| Phase | Status | Commit | Notes |
+| Phase | Status | Commit | Key Deliverables |
 |---|---|---|---|
-| 0 | COMPLETE | 26e25d0 | Existing system audit: verified architecture, baseline execution, and identified constraint handling discrepancy |
-| 1 | COMPLETE | 37cf1ba | True constraint-aware clustering: separate constrained docs before HDBSCAN, global centroid merging, unit test suite |
-| 2 | COMPLETE | 147da2d | Stable cluster identity and layout: UUID overlap lineage, pairwise circular relaxation, anchor damping |
-| 3 | COMPLETE | 22d8384 | Testing and evaluation foundation: synthetic corpora fixtures, modular test suites (quality, constraints, physics, API), unified runner |
+| 0 | COMPLETE | da5a842 | Baseline audit and verification of existing system |
+| 1 | COMPLETE | dcbf6b5 | True constraint-aware clustering pipeline, pre-HDBSCAN separation, global centroid/boundary evaluation |
+| 2 | COMPLETE | 7114e91 | Stable cluster UUID lineage across incremental updates, cyclic angular relaxation |
+| 3 | COMPLETE | 22d8384 | Testing and evaluation foundation: synthetic corpora fixtures, modular test suites, unified runner |
 | 4 | COMPLETE | 56147f5 | PDF upload & ingestion hardening: magic bytes validation, deduplication, disk caching, upload/delete API & UI |
 | 5 | COMPLETE | 23c987e | Automatic cluster topic modeling: c-TF-IDF, KeyBERT semantic centroid alignment, text disk cache, UI integration |
 | 6 | COMPLETE | 6737909 | Semantic search engine, POST /api/search, canvas glowing halo heatmap, relevance sidebar |
 | 7 | COMPLETE | c3e8170 | Interactive cluster lifecycle management (Rename, Merge, Split), REST endpoints, and UI integration |
-| 8 | NOT STARTED | — | Frontend Polish + Evidence Explanation |
-| 9 | NOT STARTED | — | Performance + Reliability |
-| 10 | NOT STARTED | — | Complete Evaluation |
-| 11 | NOT STARTED | — | Documentation |
-| 12 | NOT STARTED | — | Security + Robustness |
-| 13 | NOT STARTED | — | Final Regression |
+| 8 | COMPLETE | 38a7736 | Complete Phase 8 frontend redesign: 3-Zone architecture, collapsible NavRail, CommandBar, InspectorDrawer workspaces, evidence inspection, and 60fps interaction polish |
+| 9 | COMPLETE | b40b071 | Performance & reliability optimizations: memoized node rendering, clean render cycles, verified physics |
+| 10 | COMPLETE | d0ac658 | Complete quantitative evaluation across E1, E2, E3, E4, and Scalability benchmarks |
+| 11 | COMPLETE | b430029 | Documentation & Reproducibility: comprehensive README, architecture update, docs/REPRODUCIBILITY.md, claims audit |
+| 12 | COMPLETE | 79e8dd1 | Security & Robustness: constraint input validation, path traversal defense, state isolation |
+| 13 | COMPLETE | cfe055f | Final Regression & Freeze: full suite regression, API smoke test, evaluation reproducibility |
 
 ## Open Issues
 

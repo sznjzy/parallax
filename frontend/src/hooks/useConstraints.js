@@ -69,6 +69,11 @@ export function useConstraints() {
       return saved
     } catch (err) {
       console.error('[useConstraints] addConstraint error:', err.message)
+      // Resync state with backend on failure to prevent stale UI state
+      fetch('/api/constraints')
+        .then(r => r.json())
+        .then(d => dispatch({ type: 'SET_CONSTRAINTS', constraints: d ?? [] }))
+        .catch(() => {})
       throw err
     } finally {
       setIsLoading(false)
@@ -91,6 +96,11 @@ export function useConstraints() {
       dispatch({ type: 'REMOVE_CONSTRAINT', doc_id })
     } catch (err) {
       console.error('[useConstraints] removeConstraint error:', err.message)
+      // Resync state with backend on failure to prevent stale UI state
+      fetch('/api/constraints')
+        .then(r => r.json())
+        .then(d => dispatch({ type: 'SET_CONSTRAINTS', constraints: d ?? [] }))
+        .catch(() => {})
       throw err
     } finally {
       setIsLoading(false)

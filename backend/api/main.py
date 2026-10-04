@@ -35,6 +35,7 @@ from backend.ingestion.ingest import (
     save_and_ingest_pdf,
     delete_document_file,
     validate_pdf_file,
+    sanitize_filename,
 )
 
 app = FastAPI(
@@ -368,12 +369,7 @@ def get_document_pdf(filename: str):
     Serve a PDF document directly by filename (e.g. 'paper1.pdf' or 'doc-paper1.pdf')
     for in-browser viewing.
     """
-    safe_name = filename.removeprefix("doc-")
-    if not safe_name.lower().endswith(".pdf"):
-        safe_name = f"{safe_name}.pdf"
-
-    # Path traversal protection
-    clean_name = Path(safe_name).name
+    clean_name = sanitize_filename(filename.removeprefix("doc-"))
     pdf_path = SAMPLE_DOCS_DIR / clean_name
 
     if not pdf_path.exists() or not pdf_path.is_file():
@@ -669,8 +665,13 @@ def create_constraint(body: ConstraintRequest):
 
     Response — the saved constraint object.
     """
+    if not body.doc_id or not body.doc_id.strip() or not body.cluster_id or not body.cluster_id.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="doc_id and cluster_id must be non-empty strings.",
+        )
     try:
-        constraint = add_constraint(body.doc_id, body.cluster_id)
+        constraint = add_constraint(body.doc_id.strip(), body.cluster_id.strip())
         return asdict(constraint)
     except Exception as exc:
         raise HTTPException(

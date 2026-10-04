@@ -46,7 +46,8 @@ def sanitize_filename(filename: str) -> str:
     Sanitize filename to prevent directory traversal and invalid character injection.
     Only allows alphanumeric, underscore, hyphen, and period.
     """
-    base_name = Path(filename).name.strip()
+    clean_input = filename.replace("\x00", "").replace("\\", "/").strip()
+    base_name = Path(clean_input).name.strip()
     # Normalize extension to lowercase .pdf
     if not base_name.lower().endswith(".pdf"):
         base_name = f"{base_name}.pdf"

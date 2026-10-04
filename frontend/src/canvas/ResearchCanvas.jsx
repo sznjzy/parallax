@@ -25,7 +25,6 @@ import { useConstraints } from '../hooks/useConstraints'
 import ClusterRegion from './ClusterRegion'
 import DocumentNode from './DocumentNode'
 import NodeTooltip from '../components/NodeTooltip'
-import SelectedNodeBar from '../components/SelectedNodeBar'
 import { registerClusters } from './clusterColor'
 
 // Logical canvas dimensions — must match physics.py CANVAS_WIDTH / CANVAS_HEIGHT
@@ -45,9 +44,9 @@ export default function ResearchCanvas({ onConstraintAdded }) {
   const { width: containerW, height: containerH } = useCanvasSize(containerRef)
 
   // ── Coordinate mapping with margin insets ─────────────────────────
-  const PADDING_TOP = 28
-  const PADDING_BOTTOM = 88  // Space for SelectedNodeBar at bottom
-  const PADDING_SIDE = 48
+  const PADDING_TOP = 24
+  const PADDING_BOTTOM = 36
+  const PADDING_SIDE = 28
   const availW = Math.max(100, containerW - PADDING_SIDE * 2)
   const availH = Math.max(100, containerH - (PADDING_TOP + PADDING_BOTTOM))
   const baseScale = Math.min(availW / LOGICAL_W, availH / LOGICAL_H)
@@ -80,7 +79,11 @@ export default function ResearchCanvas({ onConstraintAdded }) {
     }
   }, [containerW, containerH, baseScale, stageScale, stagePos, state.nodes])
 
-  // Custom events for reset zoom & export
+  // Stable ref to state for decoupled export event handling
+  const stateRef = useRef(state)
+  stateRef.current = state
+
+  // Custom events for reset zoom & export (stabilized across state updates)
   useEffect(() => {
     const onReset = () => {
       setStagePos({ x: 0, y: 0 })
@@ -99,13 +102,14 @@ export default function ResearchCanvas({ onConstraintAdded }) {
     }
 
     const onExportJSON = () => {
+      const curState = stateRef.current
       const exportData = {
         exported_at: new Date().toISOString(),
-        num_nodes: state.nodes.length,
-        num_clusters: new Set(state.nodes.map(n => n.cluster_id)).size,
-        evaluation: state.evaluation,
-        constraints: state.constraints,
-        nodes: state.nodes,
+        num_nodes: curState.nodes.length,
+        num_clusters: new Set(curState.nodes.map(n => n.cluster_id)).size,
+        evaluation: curState.evaluation,
+        constraints: curState.constraints,
+        nodes: curState.nodes,
       }
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
@@ -115,19 +119,24 @@ export default function ResearchCanvas({ onConstraintAdded }) {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     }
 
     window.addEventListener('parallax-reset-zoom', onReset)
+    window.addEventListener('parallax:recenter', onReset)
     window.addEventListener('parallax-export-png', onExportPNG)
+    window.addEventListener('parallax:export-png', onExportPNG)
     window.addEventListener('parallax-export-json', onExportJSON)
 
     return () => {
       window.removeEventListener('parallax-reset-zoom', onReset)
+      window.removeEventListener('parallax:recenter', onReset)
       window.removeEventListener('parallax-export-png', onExportPNG)
+      window.removeEventListener('parallax:export-png', onExportPNG)
       window.removeEventListener('parallax-export-json', onExportJSON)
     }
-  }, [state.nodes, state.evaluation, state.constraints])
+  }, [])
+
 
   // ── Wheel zoom / pan ────────────────────────────────────────────────
   const handleWheel = useCallback(e => {
@@ -160,16 +169,44 @@ export default function ResearchCanvas({ onConstraintAdded }) {
     })
   }, [stageScale])
 
-  // ── Node selection ─────────────────────────────────────────────────
-  const handleSelect = useCallback(doc_id => {
-    dispatch({ type: 'SELECT_NODE', doc_id })
-  }, [dispatch])
+  // ── Derived data & search maps ────────────────────────────────────
+  const uniqueClusterIds = useMemo(() =>
+    [...new Set(state.nodes.map(n => n.cluster_id))],
+    [state.nodes]
+  )
 
-  // ── Tooltip state ─────────────────────────────────────────────────
-  const [tooltip, setTooltip] = useState({ node: null, x: 0, y: 0 })
-  const handleHover = useCallback((node, x, y) => {
-    setTooltip({ node, x, y })
-  }, [])
+  // Register all active clusters as a batch so every cluster gets a unique,
+  // collision-free palette colour.
+  useEffect(() => {
+    if (uniqueClusterIds.length > 0) {
+      registerClusters(uniqueClusterIds)
+    }
+  }, [uniqueClusterIds])
+
+  const constrainedDocIds = useMemo(() =>
+    new Set(state.constraints.map(c => c.doc_id)),
+    [state.constraints]
+  )
+
+  const selectedClusterId = useMemo(() => {
+    if (!state.selectedDocId) return null
+    return state.nodes.find(n => n.doc_id === state.selectedDocId)?.cluster_id ?? null
+  }, [state.selectedDocId, state.nodes])
+
+  // ── Semantic Search Heatmap data (Phase 6) ─────────────────────────
+  const searchResultsMap = useMemo(() => {
+    if (!state.searchActive || !state.searchResults?.results) return null
+    const map = {}
+    for (const r of state.searchResults.results) {
+      map[r.doc_id] = r
+    }
+    return map
+  }, [state.searchActive, state.searchResults])
+
+  const clusterRelevanceMap = useMemo(() => {
+    if (!state.searchActive || !state.searchResults?.cluster_relevance) return null
+    return state.searchResults.cluster_relevance
+  }, [state.searchActive, state.searchResults])
 
   // ── Cluster centroid lookup ───────────────────────────────────────
   const clusterCentroids = useMemo(() => {
@@ -190,6 +227,31 @@ export default function ResearchCanvas({ onConstraintAdded }) {
     }
     return centroids
   }, [state.nodes])
+
+  // ── Node selection & interactions ──────────────────────────────────
+  const handleSelect = useCallback(doc_id => {
+    dispatch({ type: 'SELECT_NODE', doc_id })
+  }, [dispatch])
+
+  // ── PDF viewing ───────────────────────────────────────────────────
+  const handleOpenPdf = useCallback((doc_id) => {
+    const match = searchResultsMap?.[doc_id]
+    const filename = doc_id.replace(/^doc-/, '')
+    dispatch({
+      type: 'VIEW_DOCUMENT',
+      filename,
+      doc_id,
+      page: match?.page_number || 1,
+      highlightTerm: match?.highlight_term || (match?.match_type === 'exact' ? state.searchResults?.query : null),
+      searchMatch: match || null,
+    })
+  }, [searchResultsMap, state.searchResults?.query, dispatch])
+
+  // ── Tooltip state ─────────────────────────────────────────────────
+  const [tooltip, setTooltip] = useState({ node: null, x: 0, y: 0 })
+  const handleHover = useCallback((node, x, y) => {
+    setTooltip({ node, x, y })
+  }, [])
 
   // ── Drag move tracking for target cluster highlight ───────────────
   const handleDragMove = useCallback((doc_id, logX, logY, isShiftKey) => {
@@ -272,45 +334,6 @@ export default function ResearchCanvas({ onConstraintAdded }) {
     }
   }, [state.nodes, clusterCentroids, addConstraint, onConstraintAdded, dispatch])
 
-  // ── Derived data ──────────────────────────────────────────────────
-  const uniqueClusterIds = useMemo(() =>
-    [...new Set(state.nodes.map(n => n.cluster_id))],
-    [state.nodes]
-  )
-
-  // Register all active clusters as a batch so every cluster gets a unique,
-  // collision-free palette colour.  Must run before the first render that
-  // consumes clusterColor() — hence the effect fires on uniqueClusterIds.
-  useEffect(() => {
-    if (uniqueClusterIds.length > 0) {
-      registerClusters(uniqueClusterIds)
-    }
-  }, [uniqueClusterIds])
-
-  const constrainedDocIds = useMemo(() =>
-    new Set(state.constraints.map(c => c.doc_id)),
-    [state.constraints]
-  )
-
-  const selectedClusterId = useMemo(() => {
-    if (!state.selectedDocId) return null
-    return state.nodes.find(n => n.doc_id === state.selectedDocId)?.cluster_id ?? null
-  }, [state.selectedDocId, state.nodes])
-
-  // ── Semantic Search Heatmap data (Phase 6) ─────────────────────────
-  const searchResultsMap = useMemo(() => {
-    if (!state.searchActive || !state.searchResults?.results) return null
-    const map = {}
-    for (const r of state.searchResults.results) {
-      map[r.doc_id] = r
-    }
-    return map
-  }, [state.searchActive, state.searchResults])
-
-  const clusterRelevanceMap = useMemo(() => {
-    if (!state.searchActive || !state.searchResults?.cluster_relevance) return null
-    return state.searchResults.cluster_relevance
-  }, [state.searchActive, state.searchResults])
 
   return (
     <div
@@ -349,6 +372,8 @@ export default function ResearchCanvas({ onConstraintAdded }) {
                 isDragTarget={cid === dragTargetClusterId}
                 searchActive={state.searchActive}
                 clusterRelevance={clusterRelevanceMap?.[cid]}
+                topicTitle={state.topics?.[cid]?.topic_label}
+                isDark={state.theme !== 'light'}
               />
             ))}
           </Layer>
@@ -366,21 +391,12 @@ export default function ResearchCanvas({ onConstraintAdded }) {
                   node.cluster_id !== selectedClusterId &&
                   node.doc_id !== state.selectedDocId
                 }
+                isPinned={constrainedDocIds.has(node.doc_id)}
+                isDark={state.theme !== 'light'}
                 searchActive={state.searchActive}
                 searchResult={searchResultsMap?.[node.doc_id]}
                 onSelect={handleSelect}
-                onOpenPdf={(doc_id) => {
-                  const match = searchResultsMap?.[doc_id]
-                  const filename = doc_id.replace(/^doc-/, '')
-                  dispatch({
-                    type: 'VIEW_DOCUMENT',
-                    filename,
-                    doc_id,
-                    page: match?.page_number || 1,
-                    highlightTerm: match?.highlight_term || (match?.match_type === 'exact' ? state.searchResults?.query : null),
-                    searchMatch: match || null,
-                  })
-                }}
+                onOpenPdf={handleOpenPdf}
                 onHover={handleHover}
                 onDragMove={handleDragMove}
                 onDragEnd={handleDragEnd}
@@ -389,9 +405,6 @@ export default function ResearchCanvas({ onConstraintAdded }) {
           </Layer>
         </Stage>
       )}
-
-      {/* Floating Selected Node Action Bar */}
-      <SelectedNodeBar />
 
       {/* HTML tooltip — rendered outside Konva to use CSS */}
       {tooltip.node && (

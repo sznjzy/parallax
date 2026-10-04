@@ -1,47 +1,43 @@
 /**
  * App.jsx
  *
- * Root application component. Owns the overall layout and orchestrates
- * the top-level data fetching flow on mount.
- *
- * Layout
- * ------
- *   ┌─────────────────────────────────────┐
- *   │  TopBar (logo + status pill)        │  52px
- *   ├──────────┬──────────────────────────┤
- *   │ Sidebar  │   Canvas (dot-grid bg)   │
- *   │ Metrics  │   ResearchCanvas         │
- *   │ Evaluat. │   StatusBanner (overlay) │
- *   │          │   CanvasControls         │
- *   └──────────┴──────────────────────────┘
+ * Root application component for Parallax Phase 8.
+ * Implements the 3-Zone Architecture:
+ *   [ NavRail (48px) ]  │  [ Research Canvas Centerpiece ]  │  [ InspectorDrawer (360px) ]
  */
-import React, { useEffect, useCallback, useState } from 'react'
+import React, { useEffect, useCallback } from 'react'
 import { useApp } from './state/AppContext'
 import { useOrganize } from './hooks/useOrganize'
 import { useConstraints } from './hooks/useConstraints'
 import { useDocuments } from './hooks/useDocuments'
 import { useToast } from './components/ConstraintToast'
 
+import NavRail from './components/NavRail'
+import CommandBar from './components/CommandBar'
+import CanvasDock from './components/CanvasDock'
+import InspectorDrawer from './components/InspectorDrawer'
 import ResearchCanvas from './canvas/ResearchCanvas'
-import CanvasControls from './canvas/CanvasControls'
-import EvaluationPanel from './components/EvaluationPanel'
-import StatusBanner from './components/StatusBanner'
+import SettingsModal from './components/SettingsModal'
 import PdfViewerModal from './components/PdfViewerModal'
-import SearchBar from './components/SearchBar'
+
+function isTextInputActive() {
+  const el = document.activeElement
+  if (!el) return false
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable
+}
 
 export default function App() {
   const { state, dispatch } = useApp()
-  const { run, isRunning }  = useOrganize()
+  const { run, isRunning } = useOrganize()
   const { fetchConstraints } = useConstraints()
-  const { fetchDocuments }   = useDocuments()
-  const { showToast }       = useToast()
+  const { fetchDocuments } = useDocuments()
+  const { showToast } = useToast()
 
   // ── On mount: check backend status + load constraints + doc list ───
   useEffect(() => {
     dispatch({ type: 'SET_STATUS', status: 'loading', message: 'Checking backend…' })
 
     if (state.mockMode) {
-      // In mock mode, skip the health check.
       dispatch({ type: 'SET_STATUS', status: 'idle' })
       fetchConstraints()
       return
@@ -63,159 +59,87 @@ export default function App() {
       })
 
     fetchConstraints()
-    fetchDocuments()   // populate the document selector sidebar
+    fetchDocuments()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Constraint added callback ──────────────────────────────────────
+  // ── Constraint added callback (triggers toast with Undo) ───────────
   const handleConstraintAdded = useCallback((doc_id, cluster_id) => {
     showToast({ docId: doc_id, clusterId: cluster_id })
   }, [showToast])
 
-  // ── Sidebar collapsed state & resizable width ───────────────────────
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const saved = localStorage.getItem('parallax-sidebar-width')
-    return saved ? parseInt(saved, 10) : 280
-  })
-  const [isResizing, setIsResizing] = useState(false)
-
-  const startResizing = useCallback((e) => {
-    e.preventDefault()
-    setIsResizing(true)
-  }, [])
-
+  // ── Global input-safe keyboard shortcuts (1-5, Esc) ───────────────
   useEffect(() => {
-    if (!isResizing) return
+    const handleKeyDown = (e) => {
+      // Never trigger numerical shortcuts while typing or interacting with modals
+      if (isTextInputActive()) return
+      if (state.viewingDoc) return // Let PDF modal handle its own Escape
 
-    const handleMouseMove = (e) => {
-      const newWidth = Math.max(220, Math.min(650, e.clientX))
-      setSidebarWidth(newWidth)
+      switch (e.key) {
+        case '1':
+          e.preventDefault()
+          dispatch({ type: 'SET_WORKSPACE_MODE', mode: null })
+          break
+        case '2':
+          e.preventDefault()
+          dispatch({ type: 'SET_WORKSPACE_MODE', mode: 'search' })
+          break
+        case '3':
+          e.preventDefault()
+          dispatch({ type: 'SET_WORKSPACE_MODE', mode: 'library' })
+          break
+        case '4':
+          e.preventDefault()
+          dispatch({ type: 'SET_WORKSPACE_MODE', mode: 'cluster' })
+          break
+        case '5':
+          e.preventDefault()
+          dispatch({ type: 'SET_WORKSPACE_MODE', mode: 'evaluation' })
+          break
+        case 'Escape':
+          if (state.workspaceMode !== null) {
+            e.preventDefault()
+            dispatch({ type: 'SET_WORKSPACE_MODE', mode: null })
+          }
+          break
+        default:
+          break
+      }
     }
 
-    const handleMouseUp = () => {
-      setIsResizing(false)
-      setSidebarWidth((w) => {
-        localStorage.setItem('parallax-sidebar-width', w.toString())
-        return w
-      })
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isResizing])
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [state.viewingDoc, state.workspaceMode, dispatch])
 
   return (
     <div className="app-shell" data-theme={state.theme}>
-      {/* ── Top bar ─────────────────────────────────────────────── */}
-      <header className="app-topbar" role="banner">
-        <div className="app-logo">
-          Parallax
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', fontWeight: 400, marginLeft: 4 }}>
-            Semantic Research Canvas
-          </span>
-        </div>
+      {/* 1. Global Left Navigation Rail (48px) */}
+      <NavRail />
 
-        {/* Semantic Search Bar */}
-        <SearchBar />
+      {/* 2. Central Canvas Viewport */}
+      <main className="canvas-wrapper" role="main" aria-label="Research Canvas">
+        {/* Floating Top Command & Search Bar */}
+        <CommandBar />
 
-        <div className="app-topbar-actions">
-          {/* Cluster count pill */}
-          {state.evaluation && (
-            <span className="badge badge-accent">
-              {state.evaluation.num_clusters} clusters · {state.nodes.length} docs
-            </span>
-          )}
+        {/* Konva Stage Canvas */}
+        <ResearchCanvas onConstraintAdded={handleConstraintAdded} />
 
-          {/* Silhouette score in topbar for quick glance */}
-          {state.evaluation?.silhouette_score != null && (
-            <span
-              className={`badge ${state.evaluation.silhouette_score >= 0.25 ? 'badge-success' : 'badge-warning'}`}
-              title="Silhouette score — target > 0.25"
-            >
-              SS {state.evaluation.silhouette_score.toFixed(3)}
-            </span>
-          )}
+        {/* Floating Bottom Action Dock */}
+        <CanvasDock
+          onRun={run}
+          isRunning={isRunning}
+        />
+      </main>
 
-          {/* Sidebar toggle */}
-          <button
-            id="btn-sidebar-toggle"
-            className="btn btn-ghost btn-icon"
-            onClick={() => setSidebarOpen(o => !o)}
-            title={sidebarOpen ? 'Hide metrics panel' : 'Show metrics panel'}
-            aria-expanded={sidebarOpen}
-            aria-controls="evaluation-panel"
-          >
-            {sidebarOpen ? <PanelCloseIcon /> : <PanelOpenIcon />}
-          </button>
-        </div>
-      </header>
+      {/* 3. Contextual Right Workspace Drawer */}
+      <InspectorDrawer />
 
-      {/* ── Main body ────────────────────────────────────────────── */}
-      <div className="app-body">
-        {/* Left sidebar */}
-        <div
-          className={`app-sidebar ${sidebarOpen ? '' : 'collapsed'} ${isResizing ? 'resizing' : ''}`}
-          style={sidebarOpen ? { width: sidebarWidth, minWidth: sidebarWidth } : {}}
-        >
-          <EvaluationPanel />
-          {sidebarOpen && (
-            <div
-              className={`sidebar-resizer ${isResizing ? 'is-resizing' : ''}`}
-              onMouseDown={startResizing}
-              title="Drag to resize sidebar"
-            />
-          )}
-        </div>
+      {/* Settings & Appearance Modal — Only rendered when workspaceMode === 'settings' */}
+      {state.workspaceMode === 'settings' && (
+        <SettingsModal onClose={() => dispatch({ type: 'SET_WORKSPACE_MODE', mode: null })} />
+      )}
 
-        {/* Canvas area */}
-        <main className="canvas-wrapper" role="main" aria-label="Research canvas">
-          {/* Status overlay */}
-          <StatusBanner onRetry={run} />
-
-          {/* Konva canvas */}
-          <ResearchCanvas onConstraintAdded={handleConstraintAdded} />
-
-          {/* Floating controls */}
-          <CanvasControls
-            onRun={run}
-            isRunning={isRunning}
-            onResetZoom={() => {
-              window.dispatchEvent(new CustomEvent('parallax-reset-zoom'))
-            }}
-          />
-        </main>
-      </div>
-
-      {/* In-browser PDF Viewer Modal */}
+      {/* In-Browser Deep-Link PDF Reader Modal */}
       <PdfViewerModal />
     </div>
-  )
-}
-
-/* ── Inline SVG icons ─────────────────────────────────────────────── */
-function PanelCloseIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="18" height="18" rx="2"/>
-      <path d="M9 3v18"/>
-    </svg>
-  )
-}
-
-function PanelOpenIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="18" height="18" rx="2"/>
-      <path d="M9 3v18M15 9l3 3-3 3"/>
-    </svg>
   )
 }

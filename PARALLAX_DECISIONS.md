@@ -126,7 +126,19 @@ Parallax functionality remains strictly based on:
 
 No generative LLMs (OpenAI, Anthropic, Gemini, Ollama, local or hosted generative models, or LLM fallbacks/modes) are required or permitted for the system to function.
 
+## ADR-011 — 3-Zone Minimalist Frontend Architecture & Contextual Workspaces
+
+Status: ACCEPTED
+
+The Parallax user interface is structured into three dedicated, uncluttered visual zones inspired by scientific and productivity tools (Obsidian, Notion, Linear):
+
+1. **Zone 1: Collapsible Navigation Rail (Left)**: Fixed 56px layout footprint expanding smoothly to a 220px overlay on hover (`cubic-bezier(0.22, 1, 0.36, 1)`). Houses primary destinations (Canvas `1`, Search `2`, Library `3`, Clusters `4`, Evaluation `5`, and modal Settings). Because the structural layout width is rigidly 56px, rail hover triggers zero canvas resizing or hit-buffer redraws, delivering a stable 60 FPS experience.
+2. **Zone 2: Canvas Centerpiece (Center)**: Full-viewport interactive Konva stage with floating top CommandBar (debounced semantic search and status pill) and floating bottom CanvasDock (Run Analysis with loading spinner, Fit View, and Rerun Physics Layout). Document and cluster labels use theme-aware dynamic contrast with white backdrops in Light Mode and dark backdrops in Dark Mode.
+3. **Zone 3: Contextual Inspector Drawer (Right)**: 360px sliding contextual workspace drawer hosting dedicated views (Search Matches, Document Library & Upload, Cluster Lifecycle Controls, Evaluation Metrics, and Document Inspector). Drawer transitions smoothly via slide/fade without blank flashing.
+4. **Modals & PDF Viewer**: Modal Settings with instant theme switching, cache inspection, and architecture stats. In-app deep-linking PDF reader modal (`PdfViewerModal.jsx`) displaying source pages and matched snippet terms.
+
 ## Future Decisions
 
 Add new ADRs below as major architectural decisions are made.
+
 

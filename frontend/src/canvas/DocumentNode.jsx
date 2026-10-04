@@ -26,7 +26,7 @@
  *   onDragMove   (doc_id, logicalX, logicalY, isShiftKey) => void
  *   onDragEnd    (doc_id, logicalX, logicalY, isShiftKey) => void
  */
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect, memo } from 'react'
 import { Group, Circle, Ring, Text, Rect } from 'react-konva'
 import Konva from 'konva'
 import { clusterColor } from './clusterColor'
@@ -44,12 +44,13 @@ function shortLabel(doc_id) {
     .slice(0, 12)
 }
 
-export default function DocumentNode({
+function DocumentNode({
   node,
   scale,
   isSelected,
   isDimmed,
   isPinned,
+  isDark = true,
   searchActive,
   searchResult,
   onSelect,
@@ -69,7 +70,7 @@ export default function DocumentNode({
 
   const isNoise   = node.cluster_id.startsWith('noise-')
   const color     = clusterColor(node.cluster_id)
-  const nodeColor = isNoise ? '#6e7681' : color
+  const nodeColor = isNoise ? (isDark ? '#6e7681' : '#64748b') : color
 
   // Search relevance calculations (Phase 6)
   const sim = searchResult ? searchResult.similarity_score : 0
@@ -372,15 +373,15 @@ export default function DocumentNode({
             width={32}
             height={11}
             cornerRadius={3}
-            fill="rgba(110, 118, 129, 0.25)"
-            stroke="#6e7681"
+            fill={isDark ? "rgba(110, 118, 129, 0.25)" : "rgba(100, 116, 139, 0.18)"}
+            stroke={isDark ? "#6e7681" : "#64748b"}
             strokeWidth={0.6}
             listening={false}
           />
           <Text
             text="outlier"
             fontSize={7}
-            fill="#8b949e"
+            fill={isDark ? "#8b949e" : "#334155"}
             align="center"
             width={32}
             x={-16}
@@ -404,16 +405,41 @@ export default function DocumentNode({
       {/* Label */}
       <Text
         text={shortLabel(node.doc_id)}
-        fontSize={8}
-        fontFamily="Inter, system-ui, sans-serif"
-        fill="#c9d1d9"
-        opacity={0.88}
+        fontSize={8.5}
+        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+        fontStyle="500"
+        fill={isDark ? "#e6edf3" : "#0f172a"}
+        opacity={0.95}
         align="center"
-        width={70}
-        x={-35}
+        width={74}
+        x={-37}
         y={BASE_RADIUS + 3}
         listening={true}
       />
     </Group>
   )
 }
+
+function areDocumentNodePropsEqual(prev, next) {
+  return (
+    prev.node.doc_id === next.node.doc_id &&
+    prev.node.x === next.node.x &&
+    prev.node.y === next.node.y &&
+    prev.node.cluster_id === next.node.cluster_id &&
+    prev.node.is_boundary_document === next.node.is_boundary_document &&
+    prev.scale === next.scale &&
+    prev.isSelected === next.isSelected &&
+    prev.isDimmed === next.isDimmed &&
+    prev.isPinned === next.isPinned &&
+    prev.isDark === next.isDark &&
+    prev.searchActive === next.searchActive &&
+    prev.searchResult === next.searchResult &&
+    prev.onSelect === next.onSelect &&
+    prev.onOpenPdf === next.onOpenPdf &&
+    prev.onHover === next.onHover &&
+    prev.onDragMove === next.onDragMove &&
+    prev.onDragEnd === next.onDragEnd
+  )
+}
+
+export default memo(DocumentNode, areDocumentNodePropsEqual)

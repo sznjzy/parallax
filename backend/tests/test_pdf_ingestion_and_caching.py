@@ -108,12 +108,15 @@ class TestPdfIngestionAndCaching(unittest.TestCase):
         self.assertIn("exceeds maximum allowed limit", err)
 
     def test_sanitize_filename_traversal_defense(self):
-        """Ensure filenames strip traversal paths and illegal characters."""
+        """Ensure filenames strip traversal paths, null bytes, and illegal characters."""
         self.assertEqual(sanitize_filename("../../etc/passwd.pdf"), "passwd.pdf")
         self.assertEqual(sanitize_filename("..\\..\\windows\\system32.pdf"), "system32.pdf")
         self.assertEqual(sanitize_filename("My Research Paper (2026)!?.pdf"), "My_Research_Paper__2026___.pdf")
         self.assertEqual(sanitize_filename(".hidden.pdf"), "hidden.pdf")
         self.assertEqual(sanitize_filename("no_extension"), "no_extension.pdf")
+        self.assertEqual(sanitize_filename("evil\x00file.pdf"), "evilfile.pdf")
+        self.assertEqual(sanitize_filename("C:\\Users\\admin\\secret.pdf"), "secret.pdf")
+        self.assertEqual(sanitize_filename("/var/log/syslog.pdf"), "syslog.pdf")
 
     def test_save_and_ingest_pdf_success_and_cache(self):
         """Test end-to-end ingestion: text extraction, chunking, and disk caching."""
