@@ -152,9 +152,11 @@ export default function ClusterRegion({
   const shortClusterLabel = cluster_id.replace(/^cluster-/, '').slice(0, 6)
   const topicMeta = state?.topics?.[cluster_id]
   const displayTitle = topicMeta?.topic_label || `Topic ${shortClusterLabel}`
-  const labelText = searchActive && isRelevantCluster
-    ? `${displayTitle} · ${Math.round(maxSim * 100)}% rel`
-    : `${displayTitle} · ${clusterNodes.length}`
+  const countSubtitle = searchActive && isRelevantCluster
+    ? `${Math.round(maxSim * 100)}% relevance`
+    : `${clusterNodes.length} ${clusterNodes.length === 1 ? 'document' : 'documents'}`
+
+  const isDark = state.theme !== 'light'
 
   // 1 Node special case: circle
   if (pts.length === 1) {
@@ -179,7 +181,15 @@ export default function ClusterRegion({
           dash={isDragTarget ? [4, 2] : [6, 4]}
           listening={false}
         />
-        <CentroidBadge cx={cx} cy={cy - r - 12} text={labelText} color={color} isHighlighted={isHighlighted} />
+        <ScientificClusterAnnotation
+          cx={cx}
+          cy={cy - r - 20}
+          title={displayTitle}
+          subtitle={countSubtitle}
+          color={color}
+          isHighlighted={isHighlighted}
+          isDark={isDark}
+        />
       </Group>
     )
   }
@@ -207,38 +217,64 @@ export default function ClusterRegion({
         listening={false}
       />
 
-      {/* Centroid Label Badge */}
-      <CentroidBadge cx={cx} cy={minY - 14} text={labelText} color={color} isHighlighted={isHighlighted} />
+      {/* Scientific Floating Cluster Annotation */}
+      <ScientificClusterAnnotation
+        cx={cx}
+        cy={minY - 24}
+        title={displayTitle}
+        subtitle={countSubtitle}
+        color={color}
+        isHighlighted={isHighlighted}
+        isDark={isDark}
+      />
     </Group>
   )
 }
 
-function CentroidBadge({ cx, cy, text, color, isHighlighted }) {
-  const badgeWidth = text.length * 6 + 18
-  const badgeHeight = 16
+function ScientificClusterAnnotation({ cx, cy, title, subtitle, color, isHighlighted, isDark }) {
+  const maxLen = Math.max(title.length, subtitle.length)
+  const boxWidth = Math.max(100, maxLen * 6.5 + 20)
+  const boxHeight = 26
+
+  const bgFill = isDark ? "rgba(11, 14, 20, 0.78)" : "rgba(255, 255, 255, 0.92)"
+  const defaultBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#cbd5e1"
+  const titleFill = isHighlighted ? color : (isDark ? "#f0f6fc" : "#0f172a")
+  const subtitleFill = isDark ? "#8b949e" : "#475569"
 
   return (
-    <Group x={cx - badgeWidth / 2} y={cy} listening={false}>
+    <Group x={cx - boxWidth / 2} y={cy} listening={false}>
+      {/* Subtle translucent backdrop */}
       <Rect
-        width={badgeWidth}
-        height={badgeHeight}
-        cornerRadius={8}
-        fill="rgba(13, 17, 23, 0.85)"
-        stroke={color}
-        strokeWidth={isHighlighted ? 1.5 : 0.8}
-        opacity={isHighlighted ? 1.0 : 0.75}
+        width={boxWidth}
+        height={boxHeight}
+        cornerRadius={5}
+        fill={bgFill}
+        stroke={isHighlighted ? color : defaultBorder}
+        strokeWidth={isHighlighted ? 1.2 : 0.8}
+        shadowColor={isDark ? "#000000" : "#64748b"}
+        shadowBlur={isDark ? 8 : 4}
+        shadowOpacity={isDark ? 0.4 : 0.12}
       />
+      {/* Topic Title */}
       <Text
-        text={text}
-        fontSize={8.5}
-        fontFamily="Inter, system-ui, sans-serif"
-        fontStyle="bold"
-        fill={color}
-        width={badgeWidth}
-        height={badgeHeight}
+        text={title}
+        fontSize={9.5}
+        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+        fontStyle="600"
+        fill={titleFill}
+        width={boxWidth}
         align="center"
-        verticalAlign="middle"
-        y={1}
+        y={4}
+      />
+      {/* Document Count Subtitle */}
+      <Text
+        text={subtitle}
+        fontSize={8}
+        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+        fill={subtitleFill}
+        width={boxWidth}
+        align="center"
+        y={15}
       />
     </Group>
   )

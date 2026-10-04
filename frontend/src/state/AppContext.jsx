@@ -2,26 +2,9 @@
  * AppContext.jsx
  *
  * Single source of truth for all global UI state.
- * Exposes:
- *   - <AppProvider> — wraps the whole app
- *   - useApp()      — hook to read state and dispatch actions
  *
- * Reducer actions
- * ---------------
- *   SET_NODES        { nodes: Node[] }
- *   SET_EVALUATION   { evaluation: object|null }
- *   SET_SKIPPED      { skipped: object[] }
- *   SET_CONSTRAINTS  { constraints: Constraint[] }
- *   ADD_CONSTRAINT   { constraint: Constraint }
- *   REMOVE_CONSTRAINT{ doc_id: string }
- *   SET_STATUS       { status: 'idle'|'loading'|'running'|'ready'|'error', message?: string }
- *   SET_THEME        { theme: 'dark'|'light' }
- *   SELECT_NODE      { doc_id: string|null }
- *   SET_MOCK_MODE    { mockMode: boolean }
- *   SET_AVAILABLE_DOCS { docs: {filename, size_bytes, cached}[] }
- *   TOGGLE_DOC       { filename: string }
- *   SELECT_ALL_DOCS  { filenames: string[] }
- *   CLEAR_ALL_DOCS
+ * Authoritative Workspace Mode:
+ *   workspaceMode: null | 'document' | 'cluster' | 'search' | 'library' | 'evaluation' | 'settings'
  */
 
 import React, { createContext, useContext, useReducer, useEffect } from 'react'
@@ -40,10 +23,17 @@ const initialState = {
   constraints: [],
   /** Pipeline + API status */
   status: 'idle',   // 'idle' | 'loading' | 'running' | 'ready' | 'error'
-  /** Human-readable status message shown in the banner */
+  /** Human-readable status message shown in the status pill */
   statusMessage: null,
-  /** Currently selected doc_id (highlights its cluster peers) */
+
+  /** Single Authoritative Contextual Workspace Mode */
+  workspaceMode: null, // null | 'document' | 'cluster' | 'search' | 'library' | 'evaluation' | 'settings'
+
+  /** Currently selected doc_id */
   selectedDocId: null,
+  /** Currently selected cluster_id */
+  selectedClusterId: null,
+
   /** Filename of the PDF currently being viewed in the modal viewer, or null */
   viewingDoc: null,
   /** Active page to display in PDF viewer (1-indexed) */
@@ -52,14 +42,17 @@ const initialState = {
   viewerHighlight: null,
   /** Active SearchResult object passed to viewer */
   viewerMatch: null,
+
   /** 'dark' | 'light' — persisted to localStorage */
   theme: localStorage.getItem('parallax-theme') || 'dark',
   /** True when running against static fixture instead of live backend */
   mockMode: typeof __MOCK_API__ !== 'undefined' ? __MOCK_API__ : false,
+
   /** List of docs returned by GET /api/documents */
   availableDocs: [],   // [{ filename, size_bytes, cached }]
   /** Set of filenames the user has selected to process */
   selectedDocs: new Set(),  // empty = all docs
+
   /** Active search query string */
   searchQuery: '',
   /** Semantic search response payload from /api/search */
@@ -73,6 +66,14 @@ const initialState = {
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 function reducer(state, action) {
   switch (action.type) {
+    case 'SET_WORKSPACE_MODE':
+      return {
+        ...state,
+        workspaceMode: action.mode,
+        // If closing inspector or switching away from document, keep or clear selection appropriately
+        selectedDocId: action.mode === 'document' ? state.selectedDocId : (action.mode === null ? null : state.selectedDocId),
+      }
+
     case 'SET_NODES':
       return { ...state, nodes: action.nodes }
 
@@ -89,7 +90,6 @@ function reducer(state, action) {
       return { ...state, constraints: action.constraints }
 
     case 'ADD_CONSTRAINT': {
-      // Replace existing constraint for the same doc, or append.
       const without = state.constraints.filter(c => c.doc_id !== action.constraint.doc_id)
       const nextConstraints = [...without, action.constraint]
       const nextNodes = state.nodes.map(n => {
@@ -178,11 +178,27 @@ function reducer(state, action) {
       return { ...state, theme: action.theme }
     }
 
-    case 'SELECT_NODE':
+    case 'SELECT_NODE': {
+      const isDeselecting = state.selectedDocId === action.doc_id || !action.doc_id
+      const nextDocId = isDeselecting ? null : action.doc_id
+      const nextMode = nextDocId ? 'document' : (state.workspaceMode === 'document' ? null : state.workspaceMode)
       return {
         ...state,
-        selectedDocId: state.selectedDocId === action.doc_id ? null : action.doc_id,
+        selectedDocId: nextDocId,
+        workspaceMode: nextMode,
       }
+    }
+
+    case 'SELECT_CLUSTER': {
+      const isDeselecting = state.selectedClusterId === action.cluster_id || !action.cluster_id
+      const nextClusterId = isDeselecting ? null : action.cluster_id
+      const nextMode = nextClusterId ? 'cluster' : (state.workspaceMode === 'cluster' ? null : state.workspaceMode)
+      return {
+        ...state,
+        selectedClusterId: nextClusterId,
+        workspaceMode: nextMode,
+      }
+    }
 
     case 'VIEW_DOCUMENT': {
       let filename = action.filename
@@ -214,10 +230,7 @@ function reducer(state, action) {
     case 'SET_MOCK_MODE':
       return { ...state, mockMode: action.mockMode }
 
-    // ── Document selector actions ──────────────────────────────────────
     case 'SET_AVAILABLE_DOCS': {
-      // If docs are loaded for the very first time (empty availableDocs), pre-select all.
-      // Otherwise, preserve the user's existing selection.
       const isFirstLoad = state.availableDocs.length === 0
       const nextSelected = isFirstLoad
         ? new Set(action.docs.map(d => d.filename))
@@ -248,7 +261,6 @@ function reducer(state, action) {
       return { ...state, selectedDocs: new Set() }
     }
 
-    // ── Semantic Search actions (Phase 6) ──────────────────────────────
     case 'SET_SEARCH_QUERY': {
       return { ...state, searchQuery: action.query }
     }
@@ -264,6 +276,7 @@ function reducer(state, action) {
         searchResults: action.results,
         searchActive: hasResults,
         isSearching: false,
+        workspaceMode: hasResults ? 'search' : state.workspaceMode,
       }
     }
 
@@ -276,6 +289,7 @@ function reducer(state, action) {
         isSearching: false,
         viewerHighlight: null,
         viewerMatch: null,
+        workspaceMode: state.workspaceMode === 'search' ? null : state.workspaceMode,
       }
     }
 
@@ -290,7 +304,7 @@ const AppContext = createContext(null)
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState)
 
-  // Sync theme to <html data-theme="..."> so CSS vars pick it up.
+  // Sync theme to <html data-theme="...">
   useEffect(() => {
     document.documentElement.dataset.theme = state.theme
   }, [state.theme])
@@ -302,7 +316,6 @@ export function AppProvider({ children }) {
   )
 }
 
-/** Convenience hook — throws if used outside <AppProvider>. */
 export function useApp() {
   const ctx = useContext(AppContext)
   if (!ctx) throw new Error('useApp must be used inside <AppProvider>')

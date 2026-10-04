@@ -17,6 +17,7 @@ import { MOCK_ORGANIZE_RESPONSE } from '../state/mockFixture'
 export function useOrganize() {
   const { state, dispatch } = useApp()
   const [isRunning, setIsRunning] = useState(false)
+  const [isRerunningLayout, setIsRerunningLayout] = useState(false)
   const [error, setError] = useState(null)
 
   const run = useCallback(async () => {
@@ -89,5 +90,48 @@ export function useOrganize() {
     }
   }, [state.mockMode, state.availableDocs, state.selectedDocs, dispatch])
 
-  return { run, isRunning, error }
+  const rerunLayout = useCallback(async () => {
+    setIsRerunningLayout(true)
+    setError(null)
+    dispatch({ type: 'SET_STATUS', status: 'running', message: 'Rerunning physics layout…' })
+
+    try {
+      let data
+
+      if (state.mockMode) {
+        await new Promise(r => setTimeout(r, 600))
+        data = MOCK_ORGANIZE_RESPONSE
+      } else {
+        const allFilenames = state.availableDocs.map(d => d.filename)
+        const selected = [...(state.selectedDocs ?? [])]
+        const filenames = selected.length > 0 && selected.length < allFilenames.length
+          ? selected
+          : []
+
+        const res = await fetch('/api/organize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filenames }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.detail || `HTTP ${res.status}`)
+        }
+        data = await res.json()
+      }
+
+      dispatch({ type: 'SET_NODES', nodes: data.nodes ?? [] })
+      if (data.topics) dispatch({ type: 'SET_TOPICS', topics: data.topics })
+      if (data.evaluation) dispatch({ type: 'SET_EVALUATION', evaluation: data.evaluation })
+      dispatch({ type: 'SET_STATUS', status: 'ready', message: null })
+    } catch (err) {
+      const msg = err.message || 'Unknown error'
+      setError(msg)
+      dispatch({ type: 'SET_STATUS', status: 'error', message: msg })
+    } finally {
+      setIsRerunningLayout(false)
+    }
+  }, [state.mockMode, state.availableDocs, state.selectedDocs, dispatch])
+
+  return { run, rerunLayout, isRunning, isRerunningLayout, error }
 }

@@ -25,7 +25,6 @@ import { useConstraints } from '../hooks/useConstraints'
 import ClusterRegion from './ClusterRegion'
 import DocumentNode from './DocumentNode'
 import NodeTooltip from '../components/NodeTooltip'
-import SelectedNodeBar from '../components/SelectedNodeBar'
 import { registerClusters } from './clusterColor'
 
 // Logical canvas dimensions — must match physics.py CANVAS_WIDTH / CANVAS_HEIGHT
@@ -45,9 +44,9 @@ export default function ResearchCanvas({ onConstraintAdded }) {
   const { width: containerW, height: containerH } = useCanvasSize(containerRef)
 
   // ── Coordinate mapping with margin insets ─────────────────────────
-  const PADDING_TOP = 28
-  const PADDING_BOTTOM = 88  // Space for SelectedNodeBar at bottom
-  const PADDING_SIDE = 48
+  const PADDING_TOP = 24
+  const PADDING_BOTTOM = 36
+  const PADDING_SIDE = 28
   const availW = Math.max(100, containerW - PADDING_SIDE * 2)
   const availH = Math.max(100, containerH - (PADDING_TOP + PADDING_BOTTOM))
   const baseScale = Math.min(availW / LOGICAL_W, availH / LOGICAL_H)
@@ -389,9 +388,6 @@ export default function ResearchCanvas({ onConstraintAdded }) {
           </Layer>
         </Stage>
       )}
-
-      {/* Floating Selected Node Action Bar */}
-      <SelectedNodeBar />
 
       {/* HTML tooltip — rendered outside Konva to use CSS */}
       {tooltip.node && (
