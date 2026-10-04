@@ -1,0 +1,57 @@
+{
+  "queries": [
+    {
+      "query_id": "Q1",
+      "query_text": "transformer self-attention language model pre-training",
+      "topic": "Attention & Language Models",
+      "relevant_doc_ids": [
+        "paper1.pdf",
+        "paper29.pdf",
+        "paper30.pdf"
+      ]
+    },
+    {
+      "query_id": "Q2",
+      "query_text": "distributed file storage consensus key-value store",
+      "topic": "Distributed Systems",
+      "relevant_doc_ids": [
+        "paper6.pdf",
+        "paper7.pdf",
+        "paper8.pdf",
+        "paper9.pdf",
+        "paper10.pdf"
+      ]
+    },
+    {
+      "query_id": "Q3",
+      "query_text": "compiler register allocation graph coloring instruction scheduling",
+      "topic": "Register Allocation & Compilers",
+      "relevant_doc_ids": [
+        "paper17.pdf",
+        "paper18.pdf",
+        "paper19.pdf",
+        "paper20.pdf"
+      ]
+    },
+    {
+      "query_id": "Q4",
+      "query_text": "graph layout dimension reduction manifold clustering",
+      "topic": "Clustering & Visualization",
+      "relevant_doc_ids": [
+        "paper23.pdf",
+        "paper24.pdf",
+        "paper25.pdf",
+        "paper31.pdf",
+        "paper33.pdf"
+      ]
+    },
+    {
+      "query_id": "Q5",
+      "query_text": "indian cooking cookware nutritional food recipe",
+      "topic": "Culinary (Corpus Outlier)",
+      "relevant_doc_ids": [
+        "paper34.pdf"
+      ]
+    }
+  ]
+}

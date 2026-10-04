@@ -4,11 +4,11 @@ This file records the actual implementation state of the Parallax repository.
 
 ## Current Phase
 
-Phase 9 — Performance + Reliability
+Phase 10 — Complete Evaluation
 
 ## Status
 
-READY FOR IMPLEMENTATION
+EVALUATION COMPLETE — READY FOR REVIEW & COMMIT GATE
 
 ## Completed Phases
 
@@ -21,10 +21,12 @@ READY FOR IMPLEMENTATION
 - **Phase 6 — Semantic Search + Canvas Heatmap**: Implemented zero-LLM semantic search engine (`backend/search/semantic_search.py`) utilizing cached 768-dim embeddings (`all-mpnet-base-v2`) and exact cosine similarity, exposed `POST /api/search` with cluster association and aggregated cluster relevance, and added an interactive topbar SearchBar, canvas heatmap glowing halos/badges (`DocumentNode.jsx`), cluster relevance highlights (`ClusterRegion.jsx`), and ranked match sidebar (`EvaluationPanel.jsx`) (55/55 unit tests passing).
 - **Phase 7 — Interactive Cluster Lifecycle**: Implemented interactive cluster lifecycle management (`backend/clustering/lifecycle.py`) with persistent custom topic title overrides (`PUT /api/clusters/{cluster_id}/topic`), cluster merging with document reassignment, constraint recording, and mapping cleanup (`POST /api/clusters/merge`), and cluster splitting using semantic embeddings with stable primary UUID lineage preservation (`POST /api/clusters/{cluster_id}/split`). Connected frontend lifecycle controls in `EvaluationPanel.jsx` via `useClusterLifecycle.js` (67/67 unit tests passing).
 - **Phase 8 — Frontend Redesign & Grounded Evidence Inspection**: Implemented a comprehensive 3-Zone UI architecture (Collapsible 56px→220px NavRail, Canvas Centerpiece with floating CommandBar and CanvasDock, Contextual Right Workspace Drawer with Search, Library, Clusters, Evaluation, and Document Inspector workspaces, and modal Settings). Refined Light/Dark theme text contrast, high-contrast canvas annotations, zero-reflow 60 FPS NavRail overlay, physics rerun integration with loading spinners, in-app deep-linking PDF viewer, and strict keyboard shortcut navigation without requiring generative LLMs (67/67 automated tests passing, production build verified).
+- **Phase 9 — Performance + Reliability**: Implemented React memoization across canvas components (`DocumentNode`, `ClusterRegion`), vectorized rendering transformations, and verified full interaction and physics stability (67/67 automated tests passing, clean production build).
+- **Phase 10 — Complete Evaluation**: Implemented end-to-end evaluation suite (`backend/evaluation/`) covering E1 Clustering Quality (HDBSCAN vs KMeans vs Agglomerative on synthetic and real 34-paper corpora), E2 Constraint Effectiveness (Conditions A–D with 100% satisfaction rate), E3 Incremental Stability (Stage 0 $\to$ 1 $\to$ 2 transitions), E4 Semantic Search (ground-truth evaluation across 5 queries, MRR = 1.0000), and controlled Scalability benchmarks ($N \le 500$). Generated comprehensive `EVALUATION_REPORT.md` and machine-readable `evaluation_results.json`.
 
 ## Current Phase Notes
 
-Phase 8 delivered the complete frontend redesign and evidence explanation interface across all workspaces. All 67 automated tests pass with 0 failures, and the production build is clean. Next phase is Phase 9 (Performance + Reliability profiling and verification).
+Phase 10 evaluation is completely implemented and executed. All 67 automated backend tests pass in 113s, production build succeeds with 0 errors, and all evaluation results have been verified against real execution data.
 
 ## Phase History
 
@@ -39,8 +41,8 @@ Phase 8 delivered the complete frontend redesign and evidence explanation interf
 | 6 | COMPLETE | 6737909 | Semantic search engine, POST /api/search, canvas glowing halo heatmap, relevance sidebar |
 | 7 | COMPLETE | c3e8170 | Interactive cluster lifecycle management (Rename, Merge, Split), REST endpoints, and UI integration |
 | 8 | COMPLETE | 38a7736 | Complete Phase 8 frontend redesign: 3-Zone architecture, collapsible NavRail, CommandBar, InspectorDrawer workspaces, evidence inspection, and 60fps interaction polish |
-| 9 | NOT STARTED | — | Performance + Reliability |
-| 10 | NOT STARTED | — | Complete Evaluation |
+| 9 | COMPLETE | b40b071 | Performance & reliability optimizations: memoized node rendering, clean render cycles, verified physics |
+| 10 | EVALUATION COMPLETE | (pending review) | Complete quantitative evaluation across E1, E2, E3, E4, and Scalability benchmarks |
 | 11 | NOT STARTED | — | Documentation |
 | 12 | NOT STARTED | — | Security + Robustness |
 | 13 | NOT STARTED | — | Final Regression |
@@ -54,4 +56,5 @@ None currently active for completed phases.
 - Do not mark a phase complete without implementation, testing, state updates, and a git commit.
 - Do not infer completion from the master plan.
 - This file must reflect repository reality.
+
 
