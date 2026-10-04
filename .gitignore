@@ -34,3 +34,50 @@ print_res.py
 
 # Environment secrets (if you add any API keys later)
 .env
+
+# Python test & coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.coverage.*
+
+# Additional editor & OS metadata
+.idea/
+*.swp
+*.swo
+
+# Node debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Non-redistributable sample research PDFs (kept locally for reproduction)
+data/sample_docs/paper1.pdf
+data/sample_docs/paper2.pdf
+data/sample_docs/paper3.pdf
+data/sample_docs/paper4.pdf
+data/sample_docs/paper6.pdf
+data/sample_docs/paper7.pdf
+data/sample_docs/paper8.pdf
+data/sample_docs/paper9.pdf
+data/sample_docs/paper10.pdf
+data/sample_docs/paper11.pdf
+data/sample_docs/paper12.pdf
+data/sample_docs/paper13.pdf
+data/sample_docs/paper14.pdf
+data/sample_docs/paper15.pdf
+data/sample_docs/paper16.pdf
+data/sample_docs/paper17.pdf
+data/sample_docs/paper18.pdf
+data/sample_docs/paper19.pdf
+data/sample_docs/paper20.pdf
+data/sample_docs/paper21.pdf
+data/sample_docs/paper22.pdf
+data/sample_docs/paper25.pdf
+data/sample_docs/paper27.pdf
+data/sample_docs/paper28.pdf
+data/sample_docs/paper29.pdf
+data/sample_docs/paper30.pdf
+data/sample_docs/paper31.pdf
+data/sample_docs/paper32.pdf
+data/sample_docs/paper33.pdf
