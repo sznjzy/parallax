@@ -1,222 +1,271 @@
-# Parallax — Persistent Semantic Research Canvas
+# Parallax — AI-Powered Semantic Research Canvas
 
-> **Status: Full-Stack Implementation Complete** — Backend clustering, incremental layout physics with 1D angular relaxation, persistent constraint satisfaction, embedding caching, collision-free cluster palettes, interactive HTML5 canvas UI, in-browser PDF reader, and evaluation metrics are fully implemented and verified. See [PROGRESS.md](PROGRESS.md) for full technical details.
-
-## What is Parallax?
-
-Parallax is a final-year CSE project that lets researchers drop PDFs/notes onto
-an infinite visual canvas. Each document is automatically embedded, similar
-documents are clustered together, and the result is rendered as a force-directed
-physics layout. The key differentiator from tools like NotebookLM is
-**persistence**: when a user manually corrects the AI (holds Shift and drags a document to a
-different cluster), that correction is stored as a persistent constraint and respected in
-all future re-clustering runs — the system never forgets it.
+> **Status:** Implementation, Testing & Quantitative Evaluation Complete (Phase 10 Verified).  
+> All 67 backend unit/integration tests pass with 0 errors, frontend production build is clean, and empirical evaluation metrics are recorded in [`EVALUATION_REPORT.md`](EVALUATION_REPORT.md).
 
 ---
 
-## Project Structure
+## 1. Project Overview
+
+**Parallax** is a semantic research canvas designed to help researchers explore, synthesize, and organize academic literature without relying on opaque, ungrounded generative LLM summaries. 
+
+### The Problem
+Traditional research tools present papers either as flat search lists or in static folder trees. While conversational AI tools offer text summaries, they frequently suffer from hallucinations, lack spatial context, and discard user organization upon re-indexing.
+
+### The Parallax Approach
+1. **Dense Vector Semantics:** Embeds research documents into a continuous 768-dimensional space using `sentence-transformers/all-mpnet-base-v2`.
+2. **Autonomous Density Clustering:** Discovers natural research themes and isolates outlier literature using HDBSCAN without requiring manual cluster count specification.
+3. **Persistent User Constraints (ADR-001):** When a user drags a document to a different cluster, that human intent is preserved as a persistent constraint in future clustering runs.
+4. **Stateful Identity & Spatial Anchoring (ADR-003, ADR-004):** Cluster identifiers and spatial arrangements remain stable across incremental document additions.
+5. **Grounded Evidence Inspection (ADR-006, ADR-010):** Explanations for cluster membership, topics, and search relevance are derived purely from measurable mathematical signals (cosine similarity, c-TF-IDF term uniqueness, and centroid alignment) with **zero generative LLM dependencies**.
+
+---
+
+## 2. Core Processing Pipeline
+
+```
+Academic PDFs
+  │
+  ▼
+[1. Safe Ingestion & Deduplication]  ──► Magic bytes signature validation & SHA-256 hash checks
+  │
+  ▼
+[2. Text Extraction & Chunking]     ──► Contiguous 400-word windows with 50-word overlap
+  │
+  ▼
+[3. Dense Vector Embeddings]        ──► all-mpnet-base-v2 (768-D), mean pooling, unit L2-norm
+  │                                      (Disk cached at data/embedding_cache/<sha256>.npy)
+  ▼
+[4. Constraint-Aware Separation]    ──► Partitions corpus into constrained vs. unconstrained sets
+  │
+  ▼
+[5. HDBSCAN Density Clustering]     ──► Autonomous cluster discovery on unconstrained documents
+  │                                      (KMeans fallback for small/degenerate corpora)
+  ▼
+[6. Constraint Assignment & Merge]  ──► Deterministically re-injects forced user constraints
+  │
+  ▼
+[7. Stable Identity Tracking]       ──► Jaccard/overlap lineage matching against state file
+  │
+  ▼
+[8. Automatic Topic Modeling]       ──► Class-based TF-IDF (c-TF-IDF) + KeyBERT centroid alignment
+  │
+  ▼
+[9. Force-Directed Spatial Layout]  ──► Deterministic circular home anchors, Euler physics integration
+  │                                      with noise perimeter isolation (ADR-007)
+  ▼
+[10. Interactive 3-Zone Interface]  ──► 60 FPS HTML5 Canvas (Konva) + Contextual Inspector Workspaces
+```
+
+---
+
+## 3. Implemented System Capabilities
+
+- **Constraint-Aware Clustering (ADR-001):** Separates constrained documents prior to density estimation, ensuring manual user corrections achieve 100% satisfaction without distorting natural cluster formation.
+- **Density-Based Clustering & Outlier Isolation (ADR-002, ADR-007):** Unsupervised theme discovery via HDBSCAN with automatic peripheral spatial isolation for noise documents (`noise-*`).
+- **Stable Cluster Identity (ADR-003):** Persistent UUID continuity across incremental updates with overlap tracking ($\ge 50\%$).
+- **Deterministic Incremental Layout (ADR-004):** Circular angular anchor relaxation ($\ge 35^\circ$) and force-directed node simulation with position reuse to minimize visual disruption.
+- **Automatic Topic Modeling (ADR-008):** Extraction of dynamic cluster titles and representative keywords using c-TF-IDF and KeyBERT semantic alignment from cached text.
+- **Zero-LLM Semantic Search (ADR-010):** Fast in-memory vector dot product retrieval with cosine similarity ranking, passage snippet extraction, and aggregated cluster relevance.
+- **Canvas Heatmap Visualization:** Dynamic radiant search halos on document nodes and cluster region highlights for query relevance.
+- **In-App PDF Reader & Evidence Inspector:** Deep-linking PDF viewer modal with search term navigation and grounded evidence cards displaying centroid distance and top terms.
+- **Interactive Cluster Lifecycle:** Full support for custom topic renaming, cluster merging, and $k$-way semantic splitting.
+- **Empirical Evaluation Suite:** Automated benchmark harness evaluating clustering quality, constraint effectiveness, incremental stability, search relevance, and scalability.
+
+---
+
+## 4. Technology Stack
+
+### Backend
+- **Language & Runtime:** Python 3.10+
+- **Web Framework:** FastAPI (`0.111+`), Uvicorn (`0.29+`)
+- **Embeddings & ML:** `sentence-transformers` (`2.6+`, `all-mpnet-base-v2`), PyTorch (`2.0+` CPU build)
+- **Clustering & Numerics:** `hdbscan` (`0.8.33+`), `scikit-learn` (`1.4+`), `numpy` (`2.0+`)
+- **PDF Ingestion:** `pypdf` (`4.0+`), `python-multipart`
+
+### Frontend
+- **Framework & Tooling:** React 18, Vite 5
+- **Canvas Rendering:** Konva 9, `react-konva` 18 (HTML5 2D Canvas)
+- **Design System:** Custom CSS tokens supporting high-contrast Dark & Light themes
+
+---
+
+## 5. Repository Structure
 
 ```
 parallax/
 ├── backend/
-│   ├── embeddings/         PDF parsing, chunking, and embedding generation
-│   │   └── embedding_cache.py  ← SHA-256 disk cache for instant reload
-│   ├── clustering/         HDBSCAN clustering & stable UUID assignments
-│   │   └── constraints.py      ← Constraint application & satisfaction math
-│   ├── layout/             Force-directed incremental layout physics engine (with angular relaxation)
-│   ├── api/                FastAPI application & integration pipeline
-│   │   ├── main.py         → Live API endpoints (organize, constraints, documents)
-│   │   ├── pipeline.py     → End-to-end integration pipeline
-│   │   └── constraints.json → Persistent user constraints store
-│   └── tests/              Validation wrappers (clustering, layout, determinism)
+│   ├── api/
+│   │   ├── main.py                  # FastAPI application routes & middleware
+│   │   ├── pipeline.py              # End-to-end processing pipeline orchestrator
+│   │   ├── cluster_mapping.json     # Persistent cluster UUID state
+│   │   └── constraints.json         # Persistent user constraint store
+│   ├── clustering/
+│   │   ├── pipeline.py              # HDBSCAN clustering, boundary detection, stable IDs
+│   │   ├── constraints.py           # Constraint management & validation
+│   │   └── lifecycle.py             # Cluster rename, merge, and split operations
+│   ├── embeddings/
+│   │   ├── pipeline.py              # Text extraction, chunking, all-mpnet-base-v2 embedding
+│   │   └── embedding_cache.py       # SHA-256 disk cache for embeddings (.npy)
+│   ├── ingestion/
+│   │   └── ingest.py                # Safe PDF validation, deduplication, chunking, caching
+│   ├── layout/
+│   │   └── physics.py               # 2D force-directed simulation & angular home anchors
+│   ├── topics/
+│   │   └── topic_modeling.py        # c-TF-IDF & KeyBERT semantic topic extraction
+│   ├── search/
+│   │   └── semantic_search.py       # In-memory vector search & cluster relevance aggregation
+│   ├── evaluation/
+│   │   ├── run_all_evaluations.py   # Master evaluation orchestrator & report generator
+│   │   ├── eval_clustering_e1.py    # E1 Clustering quality benchmarks
+│   │   ├── eval_constraints_e2.py   # E2 Constraint satisfaction experiments
+│   │   ├── eval_incremental_e3.py   # E3 Multi-stage incremental stability
+│   │   ├── eval_search_e4.py        # E4 Semantic search retrieval evaluation
+│   │   ├── eval_scalability.py      # Scalability latency benchmark (N=34 to 500)
+│   │   └── ground_truth_search.json # Ground truth relevance annotations
+│   └── tests/                       # 67 modular backend test cases
 ├── frontend/
 │   ├── src/
-│   │   ├── canvas/         Interactive Konva canvas, Cluster regions, Document nodes, Controls, clusterColor
-│   │   ├── components/     Evaluation panel, Selected node bar, PDF modal, Toast
-│   │   ├── hooks/          useOrganize, useConstraints, useDocuments, useCanvasSize
-│   │   ├── state/          Global AppContext & reducer
-│   │   └── index.css       Clean, minimalist design system tokens & styles
-│   └── package.json        React + Vite + Konva + lucide-react
+│   │   ├── App.jsx                  # Root layout with 3-Zone architecture
+│   │   ├── index.css                # Minimalist design system tokens
+│   │   ├── canvas/                  # Konva canvas stage, nodes, regions, dock, command bar
+│   │   ├── components/              # Navigation rail, contextual inspector workspaces, PDF modal
+│   │   ├── hooks/                   # Custom React hooks (useOrganize, useSearch, useConstraints, etc.)
+│   │   └── state/                   # Global AppContext & reducer
+│   └── package.json                 # Frontend package manifest
 ├── data/
-│   └── sample_docs/        DROP YOUR PDFS HERE
-├── requirements.txt        Python backend dependencies
-└── README.md
+│   ├── sample_docs/                 # Real research corpus (34 academic PDFs)
+│   └── embedding_cache/             # Precomputed SHA-256 .npy embedding cache
+├── docs/
+│   └── REPRODUCIBILITY.md           # Comprehensive reproduction & parameter guide
+├── EVALUATION_REPORT.md             # Complete quantitative evaluation results
+├── evaluation_results.json          # Machine-readable evaluation output
+├── PARALLAX_ARCHITECTURE.md         # Verified system architecture document
+├── PARALLAX_DECISIONS.md            # Architectural Decision Records (ADRs)
+├── PARALLAX_PROGRESS.md             # Phase progress log
+├── requirements.txt                 # Backend Python dependencies
+└── run_all_tests.py                 # Unified test suite runner
 ```
 
 ---
 
-## Quick Start
+## 6. Installation & Setup
 
-### Backend
+### Prerequisites
+- Python 3.10+
+- Node.js 18+ and `npm`
 
+### 1. Backend Setup
 ```bash
-# 1. Create and activate a virtual environment (Python 3.10+)
+# Create and activate virtual environment
 python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
 
-# 2. Install the package in editable mode (required for backend.* imports)
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+# source .venv/bin/activate
+
+# Install package in editable mode and install requirements
 pip install -e .
 pip install -r requirements.txt
-
-# 3. Start the API
-uvicorn backend.api.main:app --reload
-# → visit http://localhost:8000
 ```
 
-### Frontend
-
+### 2. Frontend Setup
 ```bash
 cd frontend
 npm install
+cd ..
+```
+
+---
+
+## 7. Running the Application
+
+### Start Backend API Server
+```bash
+# Run with virtual environment activated:
+python -m uvicorn backend.api.main:app --host 127.0.0.1 --port 8000
+```
+- API Liveness: `http://127.0.0.1:8000/`
+- API Documentation: `http://127.0.0.1:8000/docs`
+
+### Start Frontend Dev Server
+```bash
+# In a separate terminal:
+cd frontend
 npm run dev
-# → visit http://localhost:5173
-# The page pings the FastAPI backend at /api/ and shows the response.
 ```
+- Open browser at `http://localhost:5173/`
 
 ---
 
-## Spike Validation (run before building any UI)
+## 8. Verification & Testing
 
-### Spike A — Clustering quality
-
+### Run Automated Backend Test Suite
 ```bash
-# 1. Drop 10-15 research PDFs into  data/sample_docs/
-# 2. Run:
-python -m backend.tests.spike_clustering
+python -u run_all_tests.py
 ```
+*Current verified status:* **67/67 tests passed (0 failures, 0 errors)** in ~90–115 seconds.
 
-Reads all PDFs, embeds them with `all-mpnet-base-v2` (all chunks mean-pooled per document),
-clusters via HDBSCAN (k-means fallback for small corpora), and prints:
-
-- Per-cluster document lists with boundary flags
-- Full evaluation contract (silhouette score, num_clusters; constraint fields are `null` until constraint-storage is implemented)
-
-**Goal:** silhouette score > 0.25, clusters that match your intuition about the
-topics in your reading list.  Adjust `HDBSCAN_MIN_CLUSTER_SIZE` and
-`BOUNDARY_MARGIN` (in `clustering/pipeline.py`) if results look off.
-
----
-
-### Spike B — Layout stability
-
+### Build Production Frontend
 ```bash
-python -m backend.tests.spike_layout
+cd frontend
+npm run build
 ```
-
-Creates synthetic nodes, runs initial force-directed layout to convergence,
-anchors existing nodes, inserts 3 new nodes, runs incremental update, and
-prints:
-
-```json
-{
-  "avg_displacement_existing_nodes": ...,
-  "max_displacement_existing_nodes": ...,
-  "convergence_iterations": ...,
-  "convergence_time_ms": ...
-}
-```
-
-**Goal:** `avg_displacement_existing_nodes` should be very small (< 5 canvas
-units) — proving existing nodes don't jump when new documents are added.
+*Current verified status:* **0 errors, bundle generated cleanly in ~1.5–2.5 seconds.**
 
 ---
 
-## Skills
+## 9. Quantitative Evaluation (Phase 10)
 
-Project-specific development conventions live in `.agent/skills/`:
-
-| Skill | Controls |
-|---|---|
-| `embedding-pipeline` | Model choice, chunking rules, L2-norm, output contract |
-| `constrained-clustering` | Algorithm, constraint representation, evaluation contract |
-| `incremental-layout` | Physics parameters, anchoring, stability metrics |
-
-**All code that touches embeddings, clustering, or layout must follow the
-corresponding skill's output/evaluation contracts exactly**, since frontend
-rendering, the synthesis feature, and the query-highlighting feature all depend
-on those shapes.
-
----
-
-## API
-
-The FastAPI server exposes the backend pipeline over HTTP.
-
+To run the complete quantitative evaluation suite:
 ```bash
-uvicorn backend.api.main:app --reload
-# Interactive docs: http://localhost:8000/docs
+python -u backend/evaluation/run_all_evaluations.py
 ```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET`  | `/` | Liveness probe -- returns `{"status": "ok"}` |
-| `GET`  | `/api/status` | Readiness check -- reports PDF count and whether embedding model is ready |
-| `POST` | `/api/organize` | Runs the full pipeline on selected PDFs and returns canvas node positions + evaluation metrics |
-| `GET`  | `/api/constraints` | Returns list of stored persistent user constraints |
-| `POST` | `/api/constraints` | Adds or updates a persistent constraint (`{doc_id, forced_cluster_id}`) |
-| `DELETE` | `/api/constraints/{doc_id}` | Deletes a single constraint for `doc_id` |
-| `DELETE` | `/api/constraints` | Clears all stored constraints |
-| `GET`  | `/api/documents` | Returns list of available PDFs with embedding cache status |
-| `GET`  | `/api/documents/{filename}/pdf` | Streams raw PDF binary for the in-browser viewer and external tab reading |
+This generates [`EVALUATION_REPORT.md`](EVALUATION_REPORT.md) and [`evaluation_results.json`](evaluation_results.json).
 
-### `POST /api/organize` -- Response shape (v0.3)
-
-Returns a JSON **object** (not a bare array) with three keys:
-
-```json
-{
-  "nodes": [
-    {
-      "doc_id":               "doc-paper1.pdf",
-      "x":                    142.3,
-      "y":                    87.6,
-      "velocity_x":           0.000012,
-      "velocity_y":          -0.000003,
-      "is_anchored":          false,
-      "cluster_id":           "cluster-a1b2c3d4",
-      "is_boundary_document": false
-    }
-  ],
-  "evaluation": {
-    "silhouette_score":            0.3175,
-    "num_clusters":                5,
-    "constraint_satisfaction_rate": 1.0,
-    "num_constraints_applied":     2,
-    "num_constraints_violated":    0
-  },
-  "skipped_documents": [
-    {"filename": "bad.pdf", "reason": "PDF parse failed or empty"}
-  ]
-}
-```
-
-- **`nodes`**: Combined incremental-layout + constrained-clustering output contract. Each node has the six layout fields plus `cluster_id` and `is_boundary_document` so the frontend can colour-code clusters without a second request.
-- **`evaluation`**: Clustering quality metrics and persistent constraint satisfaction metrics (`constraint_satisfaction_rate`, `num_constraints_applied`, `num_constraints_violated`). Returns `null` for constraint metrics when no user constraints are active.
-- **`skipped_documents`**: PDFs that could not be parsed. Empty list means all PDFs were processed successfully.
-
-**Quick test via curl:**
-```bash
-curl -X POST http://localhost:8000/api/organize | python -m json.tool | head -60
-```
-
-**Known v0.3 simplifications (deferred):** document set is fixed to `data/sample_docs/`
-(no file upload yet); pipeline runs synchronously so large corpora may time out.
+### Key Empirical Findings:
+- **E1 (Clustering Quality):** On the 34-paper research corpus, HDBSCAN achieves Cosine Silhouette = **0.3485** and Davies-Bouldin Index = **1.1616** in **10.93 ms**, outperforming KMeans ($k=2..8$, Silhouette $\in [0.2288, 0.3316]$) and Agglomerative Clustering ($k=2..8$, Silhouette $\in [0.2225, 0.3272]$).
+- **E2 (Constraint Satisfaction):** Parallax achieves **100.0% Constraint Satisfaction Rate** across single-document, multi-document (3 competing constraints), and outlier integration conditions, maintaining unconstrained partition stability ($ARI \ge 0.8964$).
+- **E3 (Incremental Lineage):** Multi-stage corpus expansions ($N_0=20 \to N_1=27 \to N_2=34$) achieve **83.3% to 90.9% Lineage Preservation Rate** with low average spatial displacement (~35–55 px).
+- **E4 (Semantic Search):** In-memory vector dot product retrieval achieves **Mean MRR = 1.0000**, **Mean P@3 = 80.0%**, **Mean P@5 = 68.0%**, and **Mean R@5 = 96.0%** across evaluated research queries, placing the outlier `paper34.pdf` at rank #34 for computer science queries and rank #1 for culinary queries.
 
 ---
 
-## Technical Evaluation Axes
+## 10. Verified API Reference
 
-The project's evaluation centres on three claims:
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | Liveness health check |
+| `GET` | `/api/status` | Readiness check (PDF document count and embedding dependency availability) |
+| `POST` | `/api/organize` | Execute full ingestion, embedding, clustering, topic modeling, and physics layout pipeline |
+| `POST` | `/api/search` | Semantic search across document embeddings with cosine similarity ranking and cluster relevance |
+| `GET` | `/api/documents` | List available PDF documents with SHA-256 cache status |
+| `POST` | `/api/documents/upload` | Multi-PDF upload with signature validation, chunking, and immediate disk caching |
+| `DELETE` | `/api/documents/{filename}` | Delete PDF document and prune corresponding state |
+| `GET` | `/api/documents/{filename}/pdf` | Stream raw PDF binary for in-app viewing |
+| `GET` | `/api/constraints` | List all active user drag-and-drop constraints |
+| `POST` | `/api/constraints` | Save or replace a user constraint (`{doc_id, forced_cluster_id}`) |
+| `DELETE` | `/api/constraints/{doc_id}` | Remove constraint for a specific document |
+| `DELETE` | `/api/constraints` | Clear all active constraints |
+| `GET` | `/api/clusters` | List active clusters with topics, keywords, and document counts |
+| `PUT` | `/api/clusters/{cluster_id}/topic` | Override and persist custom cluster topic label |
+| `POST` | `/api/clusters/merge` | Merge source clusters into a target cluster and update constraints |
+| `POST` | `/api/clusters/{cluster_id}/split` | Split a cluster into $k$ sub-clusters using semantic embeddings |
+| `POST` | `/api/analyze` | Fast demo endpoint (clustering and topic modeling without physics simulation) |
 
-1. **Clustering quality** — embeddings + HDBSCAN meaningfully organise real
-   research documents (measured by silhouette score, validated in Spike A).
-2. **Layout stability** — adding new documents does not disrupt existing spatial
-   arrangement (measured by `avg_displacement_existing_nodes`, validated in
-   Spike B).
-3. **Constraint satisfaction** — stored user corrections are correctly respected
-   across re-clustering runs (measured by `constraint_satisfaction_rate` in the
-   clustering evaluation contract).
+---
 
-Every clustering run and every incremental layout update logs these metrics —
-see the evaluation contracts in the skill files for the exact JSON shapes.
+## 11. Known System Limitations
+
+1. **Force-Directed Physics Complexity:** The 2D Euler force simulation evaluates pairwise repulsion with $O(N^2)$ complexity. While near-instantaneous for small and medium corpora ($123.6\text{ ms}$ at $N=34$, $904.3\text{ ms}$ at $N=100$), simulation for $N=500$ nodes takes $\approx 18.6\text{ seconds}$ on CPU.
+2. **Density Sensitivity on Sparse Corpora:** Density-based clustering (HDBSCAN) requires sufficient local point density. In very small ($N < 6$) or uniformly sparse corpora, HDBSCAN may classify a majority of documents as noise; Parallax automatically falls back to KMeans in such cases.
+3. **Information Retrieval Ground Truth Scope:** The semantic search benchmark is evaluated against curated query-relevance annotations for the 34-paper sample corpus. Performance on external domains is dependent on `all-mpnet-base-v2` cross-domain embedding transfer.
+4. **Single-Node Execution:** Ingestion, disk caching, and embedding generation operate on the local filesystem of a single server instance.
+
+---
+
+## 12. Reproducibility
+
+For comprehensive reproducibility details, mathematical formulas, and step-by-step experiment instructions, see [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md).
