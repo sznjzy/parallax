@@ -4,7 +4,7 @@
  * Polished research search results inspector.
  * Renders ranked documents with similarity scores, match locations, and excerpt snippets.
  */
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useApp } from '../state/AppContext'
 import { useSearch } from '../hooks/useSearch'
 import { clusterColor } from '../canvas/clusterColor'
@@ -13,7 +13,7 @@ export default function SearchWorkspace({ onClose }) {
   const { state, dispatch } = useApp()
   const { clearSearch } = useSearch()
 
-  const results = state.searchResults?.results || []
+  const results = useMemo(() => state.searchResults?.results || [], [state.searchResults?.results])
   const query = state.searchResults?.query || state.searchQuery
 
   return (

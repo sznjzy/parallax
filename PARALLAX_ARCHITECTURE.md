@@ -139,13 +139,21 @@ parallax/
 - **Non-Mutating**: Pure read-only operation; zero mutation of corpus, clustering, layout, or constraints.
 - **Zero LLM**: Operates deterministically without external LLM calls.
 
-## Frontend Architecture
+## Frontend Architecture (3-Zone Minimalist Design — ADR-011)
 
 - **Stack**: React 18 + Vite + Konva / react-konva + Lucide icons.
-- **Design System**: Vanilla CSS tokens in `frontend/src/index.css` (dark mode default, glassmorphism headers, responsive panel layouts).
-- **Canvas Viewport**: `ResearchCanvas.jsx` renders clustered document nodes with convex hulls / cluster boundaries, smooth dragging, real-time boundary rings, manual cluster reassignment via drag-and-drop, and dynamic search heatmap radiant halos.
-- **Search & Heatmap**: `SearchBar.jsx` in topbar provides instant semantic search input, highlighting matched nodes with radiant halos (`DocumentNode.jsx`), glowing cluster boundaries (`ClusterRegion.jsx`), and ranked similarity list (`EvaluationPanel.jsx`).
-- **Evaluation & Documents**: `EvaluationPanel.jsx` presents live clustering silhouette score, constraint satisfaction metrics, corpus document selection, semantic search matches, cluster legend with topic titles and top keywords, and PDF reader modal triggers.
+- **Design System**: Vanilla CSS tokens in `frontend/src/index.css` (high-contrast dark and light modes, restrained glassmorphism, 60fps hardware-accelerated motion tokens, `@media (prefers-reduced-motion)` support).
+- **Zone 1: Collapsible Navigation Rail**: `NavRail.jsx` provides a fixed 56px layout footprint that smoothly expands on hover to a 220px overlay (`width 240ms cubic-bezier(0.22, 1, 0.36, 1)`), exposing primary destinations (Canvas, Search, Library, Clusters, Evaluation, Settings) without triggering canvas layout reflows.
+- **Zone 2: Canvas Centerpiece**: `ResearchCanvas.jsx` renders clustered document nodes with convex hulls / cluster boundaries, smooth dragging, real-time boundary rings, manual constraint creation, dynamic search heatmap radiant halos, and theme-aware high-contrast annotation cards. Floating `CommandBar.jsx` hosts semantic search and status pill; floating `CanvasDock.jsx` hosts primary pipeline execution, view recentering, and physics layout rerun with loading spinners.
+- **Zone 3: Contextual Inspector Drawer**: `InspectorDrawer.jsx` is a 360px sliding contextual workspace panel hosting dedicated views:
+  - `SearchWorkspace.jsx`: Ranked cosine similarity matches with passage snippets and jump-to-source triggers.
+  - `LibraryWorkspace.jsx`: Corpus inventory, PDF upload dropzone, cache state badges, and deletion controls.
+  - `ClusterInspector.jsx`: Topic label override/rename, cluster merge, and k-way semantic split controls.
+  - `EvaluationWorkspace.jsx`: Silhouette score, Davies-Bouldin index, constraint satisfaction rate, and cluster breakdown.
+  - `DocumentInspector.jsx`: Grounded evidence inspection showing cluster membership, centroid distance, representative keywords, and similar papers without requiring generative LLMs.
+- **Modals**:
+  - `SettingsModal.jsx`: Appearance (Dark/Light theme), caching status, and architecture metrics.
+  - `PdfViewerModal.jsx`: In-app deep-linking PDF reader with page navigation and search term highlights.
 
 ## Verified API Endpoints
 
@@ -163,6 +171,10 @@ parallax/
 | POST | `/api/constraints` | Create or update user constraint (idempotent PUT) |
 | DELETE | `/api/constraints/{doc_id}` | Remove constraint for specific document |
 | DELETE | `/api/constraints` | Clear all user constraints |
+| GET | `/api/clusters` | List active clusters with topics, keywords, and document counts |
+| PUT | `/api/clusters/{cluster_id}/topic` | Rename cluster topic label with persistent override |
+| POST | `/api/clusters/merge` | Merge source cluster into target cluster |
+| POST | `/api/clusters/{cluster_id}/split` | Split cluster into k sub-clusters using semantic embeddings |
 | POST | `/api/analyze` | Fast demo endpoint with cluster topic modeling (no physics layout) |
 
 ## Architectural Principles
@@ -172,7 +184,7 @@ Parallax intentionally does not require a generative LLM. Semantic representatio
 
 ## Known Limitations & Deviations Identified
 
-1. **Frontend Polish & Evidence Inspection**: Scheduled for Phase 8 to refine UI workflows, search navigation, and expose existing measurable evidence directly on document and cluster selection.
+1. **Performance Profiling**: System profiling and runtime benchmarks across caching, clustering, and layout to be conducted in Phase 9.
 2. **Evaluation & Benchmarks**: Systematic benchmarking across clustering algorithms, synthetic fixtures, and parameter spaces is scheduled for Phase 10.
 
 ## Architecture Change Log
@@ -187,3 +199,4 @@ Parallax intentionally does not require a generative LLM. Semantic representatio
 - **Phase 6 (2026-10-03)**: Implemented semantic search engine (`backend/search/semantic_search.py`), exact cosine similarity ranking against cached 768-dim embeddings, `POST /api/search` endpoint with cluster relevance aggregation, topbar `SearchBar.jsx`, canvas radiant glowing heatmap halos (`DocumentNode.jsx`), cluster relevance highlights (`ClusterRegion.jsx`), and ranked match sidebar (`EvaluationPanel.jsx`), adding dedicated test suite `test_semantic_search.py` (55/55 tests passing).
 - **Phase 7 (2026-10-04)**: Implemented interactive cluster lifecycle management (`backend/clustering/lifecycle.py`) supporting cluster renaming (`PUT /api/clusters/{cluster_id}/topic`), cluster merging (`POST /api/clusters/merge`), and cluster splitting (`POST /api/clusters/{cluster_id}/split`) with persistent topic overrides, constraint synchronization, stable UUID lineage, and UI lifecycle controls in `EvaluationPanel.jsx` (67/67 tests passing).
 - **Roadmap Scope Reduction (2026-10-04)**: Streamlined remaining roadmap to eliminate citation networks, speculative gap radar, and standalone explorer subsystems in favor of focused frontend evidence inspection, performance profiling, rigorous evaluation, and hardening.
+- **Phase 8 (2026-10-04)**: Complete frontend redesign following 3-Zone Architecture (ADR-011): collapsible 56px→220px NavRail with zero-reflow 60fps overlay, floating CommandBar and CanvasDock with physics rerun and loading spinners, 360px contextual sliding InspectorDrawer (Search, Library, Clusters, Evaluation, and Document Inspector workspaces), refined Light/Dark theme text contrast, and in-app deep-link PDF viewer (67/67 automated tests passing, production build clean).

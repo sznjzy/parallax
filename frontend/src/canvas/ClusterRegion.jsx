@@ -13,9 +13,8 @@
  *   isSelected    boolean    highlight when a sibling node is selected
  *   isDragTarget  boolean    pulsing/bold highlight when user is dragging a node over this cluster
  */
-import React from 'react'
+import React, { memo, useMemo } from 'react'
 import { Group, Line, Circle, Rect, Text } from 'react-konva'
-import { useApp } from '../state/AppContext'
 import { clusterColor } from './clusterColor'
 
 const PADDING = 24 // outward offset in px
@@ -102,7 +101,7 @@ function expandHull(hull, cx, cy, padding = PADDING) {
   })
 }
 
-export default function ClusterRegion({
+function ClusterRegion({
   cluster_id,
   nodes,
   scale,
@@ -110,19 +109,42 @@ export default function ClusterRegion({
   isDragTarget,
   searchActive,
   clusterRelevance,
+  topicTitle,
+  isDark = true,
 }) {
-  const { state } = useApp()
-
   // Skip noise pseudo-clusters
   if (cluster_id.startsWith('noise-')) return null
 
-  const clusterNodes = nodes.filter(n => n.cluster_id === cluster_id)
-  if (clusterNodes.length === 0) return null
+  const clusterNodes = useMemo(() => {
+    return nodes.filter(n => n.cluster_id === cluster_id)
+  }, [nodes, cluster_id])
 
-  const pts = clusterNodes.map(n => ({ x: n.x * scale, y: n.y * scale }))
-  const cx = pts.reduce((sum, p) => sum + p.x, 0) / pts.length
-  const cy = pts.reduce((sum, p) => sum + p.y, 0) / pts.length
+  // Coordinate signature for memoizing geometric hull calculations
+  const coordKey = useMemo(() => {
+    return clusterNodes.map(n => `${n.x.toFixed(2)},${n.y.toFixed(2)}`).join(';')
+  }, [clusterNodes])
 
+  const hullData = useMemo(() => {
+    if (clusterNodes.length === 0) return null
+    const pts = clusterNodes.map(n => ({ x: n.x * scale, y: n.y * scale }))
+    const cx = pts.reduce((sum, p) => sum + p.x, 0) / pts.length
+    const cy = pts.reduce((sum, p) => sum + p.y, 0) / pts.length
+
+    if (pts.length === 1) {
+      return { type: 'circle', cx, cy, pts }
+    }
+
+    const rawHull = pts.length === 2 ? pts : convexHull(pts)
+    const expanded = expandHull(rawHull, cx, cy, PADDING)
+    const flatPoints = expanded.flatMap(p => [p.x, p.y])
+    const minY = Math.min(...expanded.map(p => p.y))
+
+    return { type: 'hull', cx, cy, flatPoints, minY }
+  }, [coordKey, scale, clusterNodes.length])
+
+  if (!hullData) return null
+
+  const { cx, cy } = hullData
   const color = clusterColor(cluster_id)
 
   // Search relevance calculations (Phase 6)
@@ -148,18 +170,14 @@ export default function ClusterRegion({
   }
 
   const isHighlighted = isSelected || isDragTarget || isRelevantCluster
-
   const shortClusterLabel = cluster_id.replace(/^cluster-/, '').slice(0, 6)
-  const topicMeta = state?.topics?.[cluster_id]
-  const displayTitle = topicMeta?.topic_label || `Topic ${shortClusterLabel}`
+  const displayTitle = topicTitle || `Topic ${shortClusterLabel}`
   const countSubtitle = searchActive && isRelevantCluster
     ? `${Math.round(maxSim * 100)}% relevance`
     : `${clusterNodes.length} ${clusterNodes.length === 1 ? 'document' : 'documents'}`
 
-  const isDark = state.theme !== 'light'
-
   // 1 Node special case: circle
-  if (pts.length === 1) {
+  if (hullData.type === 'circle') {
     const r = 32
     return (
       <Group listening={false}>
@@ -195,18 +213,11 @@ export default function ClusterRegion({
   }
 
   // 2+ Nodes: Convex hull
-  const rawHull = pts.length === 2 ? pts : convexHull(pts)
-  const expanded = expandHull(rawHull, cx, cy, PADDING)
-  const flatPoints = expanded.flatMap(p => [p.x, p.y])
-
-  // Compute top-most point for badge position
-  const minY = Math.min(...expanded.map(p => p.y))
-
   return (
     <Group listening={false}>
       {/* Smooth Hull Region Fill & Stroke */}
       <Line
-        points={flatPoints}
+        points={hullData.flatPoints}
         closed
         tension={0.35}
         fill={color}
@@ -220,7 +231,7 @@ export default function ClusterRegion({
       {/* Scientific Floating Cluster Annotation */}
       <ScientificClusterAnnotation
         cx={cx}
-        cy={minY - 24}
+        cy={hullData.minY - 24}
         title={displayTitle}
         subtitle={countSubtitle}
         color={color}
@@ -230,6 +241,41 @@ export default function ClusterRegion({
     </Group>
   )
 }
+
+function areClusterRegionPropsEqual(prev, next) {
+  if (
+    prev.cluster_id !== next.cluster_id ||
+    prev.scale !== next.scale ||
+    prev.isSelected !== next.isSelected ||
+    prev.isDragTarget !== next.isDragTarget ||
+    prev.searchActive !== next.searchActive ||
+    prev.clusterRelevance !== next.clusterRelevance ||
+    prev.topicTitle !== next.topicTitle ||
+    prev.isDark !== next.isDark
+  ) {
+    return false
+  }
+
+  // Check if any member node in this cluster changed coordinates or membership
+  const prevNodes = prev.nodes.filter(n => n.cluster_id === prev.cluster_id)
+  const nextNodes = next.nodes.filter(n => n.cluster_id === next.cluster_id)
+
+  if (prevNodes.length !== nextNodes.length) return false
+
+  for (let i = 0; i < prevNodes.length; i++) {
+    if (
+      prevNodes[i].doc_id !== nextNodes[i].doc_id ||
+      prevNodes[i].x !== nextNodes[i].x ||
+      prevNodes[i].y !== nextNodes[i].y
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
+export default memo(ClusterRegion, areClusterRegionPropsEqual)
 
 function ScientificClusterAnnotation({ cx, cy, title, subtitle, color, isHighlighted, isDark }) {
   const maxLen = Math.max(title.length, subtitle.length)

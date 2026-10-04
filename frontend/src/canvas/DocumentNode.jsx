@@ -26,10 +26,9 @@
  *   onDragMove   (doc_id, logicalX, logicalY, isShiftKey) => void
  *   onDragEnd    (doc_id, logicalX, logicalY, isShiftKey) => void
  */
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect, memo } from 'react'
 import { Group, Circle, Ring, Text, Rect } from 'react-konva'
 import Konva from 'konva'
-import { useApp } from '../state/AppContext'
 import { clusterColor } from './clusterColor'
 
 const BASE_RADIUS    = 12
@@ -45,12 +44,13 @@ function shortLabel(doc_id) {
     .slice(0, 12)
 }
 
-export default function DocumentNode({
+function DocumentNode({
   node,
   scale,
   isSelected,
   isDimmed,
   isPinned,
+  isDark = true,
   searchActive,
   searchResult,
   onSelect,
@@ -59,8 +59,6 @@ export default function DocumentNode({
   onDragMove,
   onDragEnd,
 }) {
-  const { state } = useApp()
-  const isDark = state.theme !== 'light'
   const [hovered, setHovered]   = useState(false)
   const [dragging, setDragging] = useState(false)
   const groupRef = useRef(null)
@@ -421,3 +419,27 @@ export default function DocumentNode({
     </Group>
   )
 }
+
+function areDocumentNodePropsEqual(prev, next) {
+  return (
+    prev.node.doc_id === next.node.doc_id &&
+    prev.node.x === next.node.x &&
+    prev.node.y === next.node.y &&
+    prev.node.cluster_id === next.node.cluster_id &&
+    prev.node.is_boundary_document === next.node.is_boundary_document &&
+    prev.scale === next.scale &&
+    prev.isSelected === next.isSelected &&
+    prev.isDimmed === next.isDimmed &&
+    prev.isPinned === next.isPinned &&
+    prev.isDark === next.isDark &&
+    prev.searchActive === next.searchActive &&
+    prev.searchResult === next.searchResult &&
+    prev.onSelect === next.onSelect &&
+    prev.onOpenPdf === next.onOpenPdf &&
+    prev.onHover === next.onHover &&
+    prev.onDragMove === next.onDragMove &&
+    prev.onDragEnd === next.onDragEnd
+  )
+}
+
+export default memo(DocumentNode, areDocumentNodePropsEqual)

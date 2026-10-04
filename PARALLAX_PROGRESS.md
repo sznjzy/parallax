@@ -4,11 +4,11 @@ This file records the actual implementation state of the Parallax repository.
 
 ## Current Phase
 
-Phase 8 — Frontend Polish + Evidence Explanation
+Phase 9 — Performance + Reliability
 
 ## Status
 
-READY FOR APPROVAL
+READY FOR IMPLEMENTATION
 
 ## Completed Phases
 
@@ -20,10 +20,11 @@ READY FOR APPROVAL
 - **Phase 5 — Automatic Cluster Topic Modeling**: Implemented Class-based TF-IDF (c-TF-IDF) in `backend/topics/topic_modeling.py` with optional KeyBERT semantic centroid alignment, academic stopword filtering, dynamic topic updating across constraint/corpus changes, text disk caching (`<hash>.txt`), and UI topic labels in `ClusterRegion.jsx` and `EvaluationPanel.jsx` (47/47 unit tests passing).
 - **Phase 6 — Semantic Search + Canvas Heatmap**: Implemented zero-LLM semantic search engine (`backend/search/semantic_search.py`) utilizing cached 768-dim embeddings (`all-mpnet-base-v2`) and exact cosine similarity, exposed `POST /api/search` with cluster association and aggregated cluster relevance, and added an interactive topbar SearchBar, canvas heatmap glowing halos/badges (`DocumentNode.jsx`), cluster relevance highlights (`ClusterRegion.jsx`), and ranked match sidebar (`EvaluationPanel.jsx`) (55/55 unit tests passing).
 - **Phase 7 — Interactive Cluster Lifecycle**: Implemented interactive cluster lifecycle management (`backend/clustering/lifecycle.py`) with persistent custom topic title overrides (`PUT /api/clusters/{cluster_id}/topic`), cluster merging with document reassignment, constraint recording, and mapping cleanup (`POST /api/clusters/merge`), and cluster splitting using semantic embeddings with stable primary UUID lineage preservation (`POST /api/clusters/{cluster_id}/split`). Connected frontend lifecycle controls in `EvaluationPanel.jsx` via `useClusterLifecycle.js` (67/67 unit tests passing).
+- **Phase 8 — Frontend Redesign & Grounded Evidence Inspection**: Implemented a comprehensive 3-Zone UI architecture (Collapsible 56px→220px NavRail, Canvas Centerpiece with floating CommandBar and CanvasDock, Contextual Right Workspace Drawer with Search, Library, Clusters, Evaluation, and Document Inspector workspaces, and modal Settings). Refined Light/Dark theme text contrast, high-contrast canvas annotations, zero-reflow 60 FPS NavRail overlay, physics rerun integration with loading spinners, in-app deep-linking PDF viewer, and strict keyboard shortcut navigation without requiring generative LLMs (67/67 automated tests passing, production build verified).
 
 ## Current Phase Notes
 
-Phase 7 delivered complete interactive cluster lifecycle management (Rename, Merge, Split) with stable UUID lineage, persistent constraint synchronisation, and frontend UI controls. All 67 automated tests pass with 0 failures. The roadmap was scoped down to eliminate citation extraction, speculative gap radar, and standalone explorer subsystems. Phase 8 will focus on frontend polish and exposing existing measurable evidence in the UI.
+Phase 8 delivered the complete frontend redesign and evidence explanation interface across all workspaces. All 67 automated tests pass with 0 failures, and the production build is clean. Next phase is Phase 9 (Performance + Reliability profiling and verification).
 
 ## Phase History
 
@@ -37,7 +38,7 @@ Phase 7 delivered complete interactive cluster lifecycle management (Rename, Mer
 | 5 | COMPLETE | 23c987e | Automatic cluster topic modeling: c-TF-IDF, KeyBERT semantic centroid alignment, text disk cache, UI integration |
 | 6 | COMPLETE | 6737909 | Semantic search engine, POST /api/search, canvas glowing halo heatmap, relevance sidebar |
 | 7 | COMPLETE | c3e8170 | Interactive cluster lifecycle management (Rename, Merge, Split), REST endpoints, and UI integration |
-| 8 | NOT STARTED | — | Frontend Polish + Evidence Explanation |
+| 8 | COMPLETE | 38a7736 | Complete Phase 8 frontend redesign: 3-Zone architecture, collapsible NavRail, CommandBar, InspectorDrawer workspaces, evidence inspection, and 60fps interaction polish |
 | 9 | NOT STARTED | — | Performance + Reliability |
 | 10 | NOT STARTED | — | Complete Evaluation |
 | 11 | NOT STARTED | — | Documentation |
@@ -53,3 +54,4 @@ None currently active for completed phases.
 - Do not mark a phase complete without implementation, testing, state updates, and a git commit.
 - Do not infer completion from the master plan.
 - This file must reflect repository reality.
+

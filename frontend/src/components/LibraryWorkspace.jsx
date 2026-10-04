@@ -4,7 +4,7 @@
  * Single-column document corpus management workspace.
  * Minimal vertical list with selective run, disk cache state, upload dropzone, and quick reading.
  */
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import { useApp } from '../state/AppContext'
 import { useDocuments } from '../hooks/useDocuments'
 import { useOrganize } from '../hooks/useOrganize'
@@ -22,11 +22,15 @@ export default function LibraryWorkspace({ onClose }) {
   const availableDocs = state.availableDocs || []
   const selectedDocs = state.selectedDocs || new Set()
 
-  const filteredDocs = availableDocs.filter(d =>
-    d.filename.toLowerCase().includes(filterText.toLowerCase())
-  )
+  const filteredDocs = useMemo(() => {
+    if (!filterText.trim()) return availableDocs
+    const q = filterText.toLowerCase()
+    return availableDocs.filter(d => d.filename.toLowerCase().includes(q))
+  }, [availableDocs, filterText])
 
-  const isAllSelected = availableDocs.length > 0 && selectedDocs.size === availableDocs.length
+  const isAllSelected = useMemo(() => {
+    return availableDocs.length > 0 && selectedDocs.size === availableDocs.length
+  }, [availableDocs.length, selectedDocs.size])
 
   const handleToggleAll = () => {
     if (isAllSelected) {

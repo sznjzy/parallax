@@ -10,7 +10,7 @@
  *   isRunning   — true while the request is in-flight
  *   error       — last error string, or null
  */
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { useApp } from '../state/AppContext'
 import { MOCK_ORGANIZE_RESPONSE } from '../state/mockFixture'
 
@@ -19,8 +19,12 @@ export function useOrganize() {
   const [isRunning, setIsRunning] = useState(false)
   const [isRerunningLayout, setIsRerunningLayout] = useState(false)
   const [error, setError] = useState(null)
+  const isRunningRef = useRef(false)
+  const isRerunningLayoutRef = useRef(false)
 
   const run = useCallback(async () => {
+    if (isRunningRef.current) return
+    isRunningRef.current = true
     setIsRunning(true)
     setError(null)
     dispatch({ type: 'SET_STATUS', status: 'running', message: 'Organising documents…' })
@@ -86,11 +90,14 @@ export function useOrganize() {
       setError(msg)
       dispatch({ type: 'SET_STATUS', status: 'error', message: msg })
     } finally {
+      isRunningRef.current = false
       setIsRunning(false)
     }
   }, [state.mockMode, state.availableDocs, state.selectedDocs, dispatch])
 
   const rerunLayout = useCallback(async () => {
+    if (isRerunningLayoutRef.current) return
+    isRerunningLayoutRef.current = true
     setIsRerunningLayout(true)
     setError(null)
     dispatch({ type: 'SET_STATUS', status: 'running', message: 'Rerunning physics layout…' })
@@ -129,6 +136,7 @@ export function useOrganize() {
       setError(msg)
       dispatch({ type: 'SET_STATUS', status: 'error', message: msg })
     } finally {
+      isRerunningLayoutRef.current = false
       setIsRerunningLayout(false)
     }
   }, [state.mockMode, state.availableDocs, state.selectedDocs, dispatch])

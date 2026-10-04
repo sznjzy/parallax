@@ -37,7 +37,7 @@ export default function EvaluationWorkspace({ onClose }) {
     a.href = url
     a.download = `parallax-evaluation-${Date.now()}.json`
     a.click()
-    URL.revokeObjectURL(url)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   const handleExportPng = () => {

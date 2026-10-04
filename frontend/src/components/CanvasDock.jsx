@@ -50,7 +50,7 @@ export default function CanvasDock({ onRun, isRunning: propIsRunning }) {
     a.href = url
     a.download = `parallax-export-${Date.now()}.json`
     a.click()
-    URL.revokeObjectURL(url)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   const handleRecenter = () => {

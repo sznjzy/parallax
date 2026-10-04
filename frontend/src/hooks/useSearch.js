@@ -5,18 +5,21 @@
  * Interacts with POST /api/search.
  */
 
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useApp } from '../state/AppContext'
 
 export function useSearch() {
   const { state, dispatch } = useApp()
+  const latestQueryRef = useRef('')
 
   const clearSearch = useCallback(() => {
+    latestQueryRef.current = ''
     dispatch({ type: 'CLEAR_SEARCH' })
   }, [dispatch])
 
   const search = useCallback(async (query, top_k = null) => {
     const trimmed = query ? query.trim() : ''
+    latestQueryRef.current = trimmed
     if (!trimmed) {
       clearSearch()
       return null
@@ -91,19 +94,24 @@ export function useSearch() {
       }
 
       const data = await response.json()
-      dispatch({ type: 'SET_SEARCH_RESULTS', results: data })
+      if (latestQueryRef.current === trimmed) {
+        dispatch({ type: 'SET_SEARCH_RESULTS', results: data })
+      }
       return data
     } catch (err) {
       console.error('[useSearch] Search error:', err)
-      dispatch({ type: 'SET_SEARCHING', isSearching: false })
-      dispatch({
-        type: 'SET_STATUS',
-        status: 'error',
-        message: `Search failed: ${err.message}`,
-      })
+      if (latestQueryRef.current === trimmed) {
+        dispatch({ type: 'SET_SEARCHING', isSearching: false })
+        dispatch({
+          type: 'SET_STATUS',
+          status: 'error',
+          message: `Search failed: ${err.message}`,
+        })
+      }
       return null
     }
   }, [state.mockMode, state.nodes, state.topics, state.selectedDocs, dispatch, clearSearch])
+
 
   return {
     search,
