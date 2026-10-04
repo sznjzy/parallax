@@ -404,8 +404,8 @@ def run_pipeline(
 
 def main():
     """
-    CLI stress-test: runs the Phase 1 / Phase 2 holdback experiment that was
-    used to validate stability in PROGRESS.md.
+    CLI stress-test: runs the holdback experiment used to validate
+    incremental stability and constraint-aware clustering.
     """
     logging.basicConfig(level=logging.WARNING)  # suppress library noise in CLI output
     print("==================================================")

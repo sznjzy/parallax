@@ -1,9 +1,9 @@
 """
 backend/evaluation/run_all_evaluations.py
 
-Master test and evaluation orchestrator for Parallax Phase 10.
+Master test and evaluation orchestrator for Parallax.
 Executes all experiment suites (E1, E2, E3, E4, Scalability), saves raw JSON results,
-and formats the comprehensive university-grade EVALUATION_REPORT.md document.
+and formats the comprehensive evaluation document at docs/EVALUATION.md.
 """
 
 import json
@@ -212,7 +212,7 @@ def run_all():
     print(f"Saved machine-readable results to: {json_path}")
 
     # Generate Markdown Report
-    report_path = root_dir / "EVALUATION_REPORT.md"
+    report_path = root_dir / "docs" / "EVALUATION.md"
     generate_markdown_report(results, report_path)
 
     elapsed = time.time() - t0

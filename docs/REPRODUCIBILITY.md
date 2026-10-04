@@ -131,7 +131,7 @@ python -u backend/evaluation/run_all_evaluations.py
 
 ### Generated Artifacts:
 Upon completion, the evaluation runner writes:
-1. `docs/EVALUATION.md` (or `EVALUATION_REPORT.md`) — Complete Markdown report with comparative tables.
+1. `docs/EVALUATION.md` — Complete Markdown report with comparative tables.
 2. `evaluation_results.json` — Machine-readable raw JSON data.
 
 ---
