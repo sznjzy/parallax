@@ -165,11 +165,15 @@ parallax/
 | DELETE | `/api/constraints` | Clear all user constraints |
 | POST | `/api/analyze` | Fast demo endpoint with cluster topic modeling (no physics layout) |
 
+## Architectural Principles
+
+### Zero-LLM Architecture
+Parallax intentionally does not require a generative LLM. Semantic representation uses embedding models (`sentence-transformers/all-mpnet-base-v2`), while clustering, topic modeling, search, visualization, and evidence presentation rely on deterministic or measurable computational signals.
+
 ## Known Limitations & Deviations Identified
 
-1. **Cluster Lifecycle**: Interactive cluster rename, merge, and split API endpoints are scheduled for Phase 7.
-2. **Citation Network Overlay**: Extracting and representing citation linkages across corpus papers is scheduled for Phase 8.
-3. **Research Evidence Explorer**: Scheduled for Phase 10 as a deterministic, zero-LLM explainability layer grounded exclusively in measurable signals (cosine similarities, c-TF-IDF keywords, centroid distances, citation edges) per ADR-006 / ADR-009.
+1. **Frontend Polish & Evidence Inspection**: Scheduled for Phase 8 to refine UI workflows, search navigation, and expose existing measurable evidence directly on document and cluster selection.
+2. **Evaluation & Benchmarks**: Systematic benchmarking across clustering algorithms, synthetic fixtures, and parameter spaces is scheduled for Phase 10.
 
 ## Architecture Change Log
 
@@ -181,3 +185,5 @@ parallax/
 - **Post-Phase 4 Correction (2026-10-03)**: Implemented outlier spatial isolation (ADR-007): angular gap bisector anchoring for noise clusters, strong mutual noise-cluster repulsion, gravity exclusion, and geometric convex hull clearance guarantee (`ensure_outlier_hull_isolation()`), adding regression suite `test_outlier_spatial_isolation.py` (39/39 tests passing).
 - **Phase 5 (2026-10-03)**: Implemented automatic cluster topic modeling via Class-based TF-IDF (c-TF-IDF) and KeyBERT semantic centroid alignment in `backend/topics/topic_modeling.py`, added extracted text disk caching (`<sha256>.txt`), integrated topics into `run_pipeline()`, `/api/organize`, and `/api/analyze`, updated frontend `ClusterRegion.jsx` and `EvaluationPanel.jsx` to render dynamic topic titles and representative keywords, and added comprehensive test suite `test_topic_modeling.py` (47/47 tests passing).
 - **Phase 6 (2026-10-03)**: Implemented semantic search engine (`backend/search/semantic_search.py`), exact cosine similarity ranking against cached 768-dim embeddings, `POST /api/search` endpoint with cluster relevance aggregation, topbar `SearchBar.jsx`, canvas radiant glowing heatmap halos (`DocumentNode.jsx`), cluster relevance highlights (`ClusterRegion.jsx`), and ranked match sidebar (`EvaluationPanel.jsx`), adding dedicated test suite `test_semantic_search.py` (55/55 tests passing).
+- **Phase 7 (2026-10-04)**: Implemented interactive cluster lifecycle management (`backend/clustering/lifecycle.py`) supporting cluster renaming (`PUT /api/clusters/{cluster_id}/topic`), cluster merging (`POST /api/clusters/merge`), and cluster splitting (`POST /api/clusters/{cluster_id}/split`) with persistent topic overrides, constraint synchronization, stable UUID lineage, and UI lifecycle controls in `EvaluationPanel.jsx` (67/67 tests passing).
+- **Roadmap Scope Reduction (2026-10-04)**: Streamlined remaining roadmap to eliminate citation networks, speculative gap radar, and standalone explorer subsystems in favor of focused frontend evidence inspection, performance profiling, rigorous evaluation, and hardening.

@@ -4,7 +4,7 @@ This file records the actual implementation state of the Parallax repository.
 
 ## Current Phase
 
-Phase 8 — Citation Network Overlay
+Phase 8 — Frontend Polish + Evidence Explanation
 
 ## Status
 
@@ -23,7 +23,7 @@ READY FOR APPROVAL
 
 ## Current Phase Notes
 
-Phase 7 delivered complete interactive cluster lifecycle management (Rename, Merge, Split) with stable UUID lineage, persistent constraint synchronisation, and frontend UI controls. All 67 automated tests pass with 0 failures. Phase 8 will implement citation network extraction and canvas relationship overlays.
+Phase 7 delivered complete interactive cluster lifecycle management (Rename, Merge, Split) with stable UUID lineage, persistent constraint synchronisation, and frontend UI controls. All 67 automated tests pass with 0 failures. The roadmap was scoped down to eliminate citation extraction, speculative gap radar, and standalone explorer subsystems. Phase 8 will focus on frontend polish and exposing existing measurable evidence in the UI.
 
 ## Phase History
 
@@ -35,17 +35,14 @@ Phase 7 delivered complete interactive cluster lifecycle management (Rename, Mer
 | 3 | COMPLETE | 22d8384 | Testing and evaluation foundation: synthetic corpora fixtures, modular test suites (quality, constraints, physics, API), unified runner |
 | 4 | COMPLETE | 56147f5 | PDF upload & ingestion hardening: magic bytes validation, deduplication, disk caching, upload/delete API & UI |
 | 5 | COMPLETE | 23c987e | Automatic cluster topic modeling: c-TF-IDF, KeyBERT semantic centroid alignment, text disk cache, UI integration |
-| 6 | COMPLETE | — | Semantic search engine, POST /api/search, canvas glowing halo heatmap, relevance sidebar |
-| 7 | COMPLETE | — | Interactive cluster lifecycle management (Rename, Merge, Split), REST endpoints, and UI integration |
-| 8 | NOT STARTED | — | Citation network |
-| 9 | NOT STARTED | — | Semantic frontier / candidate gap radar |
-| 10 | NOT STARTED | — | Deterministic zero-LLM Research Evidence Explorer (ADR-006, ADR-009) |
-| 11 | NOT STARTED | — | Frontend polish |
-| 12 | NOT STARTED | — | Performance and caching |
-| 13 | NOT STARTED | — | Complete evaluation |
-| 14 | NOT STARTED | — | Documentation |
-| 15 | NOT STARTED | — | Security and robustness |
-| 16 | NOT STARTED | — | Final regression |
+| 6 | COMPLETE | 6737909 | Semantic search engine, POST /api/search, canvas glowing halo heatmap, relevance sidebar |
+| 7 | COMPLETE | c3e8170 | Interactive cluster lifecycle management (Rename, Merge, Split), REST endpoints, and UI integration |
+| 8 | NOT STARTED | — | Frontend Polish + Evidence Explanation |
+| 9 | NOT STARTED | — | Performance + Reliability |
+| 10 | NOT STARTED | — | Complete Evaluation |
+| 11 | NOT STARTED | — | Documentation |
+| 12 | NOT STARTED | — | Security + Robustness |
+| 13 | NOT STARTED | — | Final Regression |
 
 ## Open Issues
 

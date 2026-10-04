@@ -52,17 +52,17 @@ The system must use language such as:
 
 It must not claim to objectively discover the true research gap.
 
-## ADR-006 — Research Evidence Explorer (Grounding & Explainability)
+## ADR-006 — Grounded Evidence Inspection (Explainability without Generative AI)
 
-Status: ACCEPTED (SUPERSEDES IDEA GHOST NODE)
+Status: ACCEPTED (SUPERSEDES IDEA GHOST NODE & STANDALONE EXPLORER)
 
-To maximize scientific rigor and viva explainability, Parallax adopts a grounded Research Evidence Explorer instead of a synthetic idea ghost node.
+To maximize scientific rigor, defensibility, and viva explainability, Parallax exposes grounded evidence directly through lightweight frontend UI inspection rather than a complex standalone subsystem or generative AI explanations.
 
 Architectural guarantees:
-1. **Evidence-Grounded**: Explanations for cluster membership, topic relationships, and candidate frontiers must be computed from measurable signals (cosine similarity, representative keywords, centroid distance, citation edges, topic overlap).
-2. **Non-Mutating**: Inspecting evidence behind a paper or cluster must not alter clustering, state, or layout.
-3. **Zero Fabrication**: The system must never fabricate or invent unsupported explanations. If a relationship cannot be verified from available metrics, the UI must explicitly state that.
-4. **No LLM Dependency**: Core explanations and metrics are computed deterministically without external LLM dependencies.
+1. **Evidence-Grounded**: Explanations for cluster membership, topic relationships, and similarity rankings are computed purely from measurable signals (cosine similarity, representative keywords, centroid distance, c-TF-IDF topic overlap).
+2. **Non-Mutating**: Inspecting evidence behind a paper or cluster does not alter clustering, state, or layout.
+3. **Zero Fabrication**: The system never fabricates or invents unsupported explanations.
+4. **No LLM Dependency**: Evidence and metrics are computed deterministically without external LLM dependencies.
 
 ## ADR-007 — Outlier and Noise Document Spatial Isolation
 
@@ -90,23 +90,41 @@ Architectural guarantees:
 3. **Dynamic Topic Reactivity**: Topics and representative keywords automatically recalculate whenever cluster membership changes (incremental PDF additions or manual drag-and-drop constraints).
 4. **Outlier Noise Preservation**: Noise documents (`noise-*`) receive dedicated outlier metadata (`Outlier (<filename>)`) and are never conflated with real semantic topics.
 
-## ADR-009 — Phase 10 Zero-LLM Architecture
+## ADR-009 — Project Scope Reduction
 
 Status: ACCEPTED
 
-The Research Evidence Explorer is intentionally implemented with zero LLM dependencies.
+Parallax prioritizes depth, correctness, evaluation, and usability over adding a large number of speculative features.
+
+Removed from the active implementation roadmap:
+- Citation Network
+- Research Frontier / Candidate Gap Radar
+- Standalone Research Evidence Explorer subsystem
 
 Rationale:
+- Reduces feature bloat and unnecessary architectural complexity
+- Eliminates unsupported scientific claims regarding automated "gap discovery"
+- Avoids complex PDF citation parsing heuristics and unvalidated citation evaluation
+- Retains lightweight evidence inspection in the frontend using existing measurable signals
+- Simplifies testing and evaluation methodologies
+- Improves academic defensibility, maintainability, and reliability of the core synthesis engine
 
-* improves reproducibility
-* improves explainability
-* eliminates hallucination risk
-* removes external API dependency
-* reduces runtime cost
-* makes evaluation easier
-* keeps the feature academically defensible
+## ADR-010 — Zero-LLM Architecture
 
-All evidence must originate from measurable signals already available in the Parallax system.
+Status: ACCEPTED
+
+The Parallax system contains no generative LLM dependency.
+
+Parallax functionality remains strictly based on:
+- Semantic embeddings (`sentence-transformers/all-mpnet-base-v2` for dense vector representations)
+- Exact cosine similarity metrics
+- HDBSCAN / KMeans constraint-aware clustering
+- Class-based TF-IDF (c-TF-IDF) and KeyBERT centroid-aligned topic extraction
+- Extracted document text and structured metadata
+- Deterministic 2D force-directed physics layout
+- Measurable relationships and deterministic algorithms
+
+No generative LLMs (OpenAI, Anthropic, Gemini, Ollama, local or hosted generative models, or LLM fallbacks/modes) are required or permitted for the system to function.
 
 ## Future Decisions
 

@@ -213,241 +213,192 @@ Do not destroy identity/history unnecessarily.
 
 ---
 
-# Phase 8 — Citation Network Overlay
+# Phase 8 — Frontend Polish + Evidence Explanation
 
-Extract and represent citation relationships when citations can be reasonably matched within the corpus.
+The goal is to make the existing Parallax functionality feel like one coherent, polished research synthesis application.
 
-Provide:
+Focus on improving:
 
-- citation edges
-- citation counts where valid
-- overlay/toggle
-- useful visualization
+### Existing search UX
+- search result presentation
+- search state
+- PDF opening
+- highlighted search matches
+- result navigation
+- canvas highlighting
+- clear/reset behavior
 
-Do not claim perfect citation extraction.
+### Existing cluster UX
+- cluster selection
+- cluster topic display
+- rename/merge/split controls
+- useful confirmation/error states
+- cluster information presentation
 
-Do not invent relationships.
-
----
-
-# Phase 9 — Cross-Disciplinary Frontier / Candidate Gap Radar
-
-Identify candidate semantic frontiers using signals such as:
-
-- semantically distant clusters
-- weakly connected areas
-- cross-cluster similarity
-- topic overlap/distance
-- citation structure where reliable
-
-Output should be framed as:
-
-"candidate semantic frontier"
-
-or
-
-"candidate research gap requiring human validation"
-
-Never claim objective discovery of the true research gap.
-
-Provide an interpretable radar/visualization.
-
----
-
-# Phase 10 — Research Evidence Explorer
-
-Phase 10 is a deterministic, zero-LLM evidence exploration layer.
-
-The goal is to make Parallax explainable, rigorous, and academically useful by allowing users to select a paper, cluster, or candidate research frontier and inspect the underlying evidence behind it.
-
-> Every explanation shown by the Research Evidence Explorer must be traceable to an underlying measurable signal in the Parallax data model. The system should prefer transparent metrics, rankings, keywords, relationships, and source references over generated prose.
-
-### Non-Negotiable Requirement: Zero LLM Dependency
-
-The Research Evidence Explorer must function completely without:
-- OpenAI
-- Anthropic
-- Gemini
-- Ollama
-- any local LLM
-- any hosted LLM API
-- any generative AI model
-- any LLM-generated explanation
-- any LLM-generated topic interpretation
-
-Phase 10 must be entirely deterministic/evidence-based using data and models already required by the existing Parallax architecture. The feature must work with network access disabled, except where the application genuinely needs network access for existing non-LLM functionality.
-
-There is NO hidden LLM fallback (do NOT implement "LLM optional", "LLM fallback", "use LLM if available", "AI explanation mode", environment variables for an LLM, API keys for an LLM, or model-provider abstractions for Phase 10). If a future feature wants natural-language summarization, that must be treated as a separate future feature and must not become part of Phase 10.
-
-### Evidence Signals
-
-Evidence must come directly from measurable signals such as:
-- embedding cosine similarity
-- document-to-cluster similarity
-- distance to cluster centroid/representation
-- cluster membership
-- cluster size
-- representative documents
+### Existing document UX
+When selecting a paper, show lightweight evidence already available in the system:
+- cluster/topic
+- outlier status
+- similarity information
 - representative keywords
-- c-TF-IDF scores
-- topic overlap
-- citation edges
-- citation counts
-- semantic similarity between clusters
-- document ranking
-- existing cluster metadata
-- existing document metadata
-- existing layout/position information where meaningful
+- nearby/related documents
+- source PDF
+- available metadata
 
-The UI should present these signals directly and transparently (e.g., Paper X → Cluster Y showing cluster membership, cosine similarity to cluster representation, top shared terms, nearest documents, citation connections, related clusters, topic overlap). The system explains relationships through these measurable signals rather than generating natural-language claims with an LLM.
+### Existing cluster evidence
+When selecting a cluster, show:
+- cluster name
+- document count
+- topic
+- representative keywords
+- representative documents
+- existing similarity/relationship information
 
-### Key Capabilities & Requirements
-
-- **Why a paper belongs to its cluster**: Direct document-to-centroid cosine similarity, top shared terms (c-TF-IDF), membership metrics.
-- **Representative papers/documents for the cluster**: Top-ranked papers closest to cluster centroid.
-- **Representative keywords/topics**: Top c-TF-IDF / KeyBERT keywords and scores.
-- **Closest semantically related papers**: k-nearest neighbors ranked by embedding cosine similarity.
-- **More distant papers or clusters**: Ranked distance metrics across the corpus.
-- **Related clusters & topic overlap**: Inter-cluster centroid cosine similarity and shared term overlap.
-- **Citation relationships**: Direct citation edges, citation counts, and referenced papers where available.
-- **Non-Mutating**: Inspecting evidence must NOT automatically mutate the corpus, clustering, or layout.
-- **Seamless UX**: Integrates transparently with the existing Parallax canvas, document sidebar, and PDF viewer.
-
----
-
-# Phase 11 — Frontend Polish + UX
-
-Polish:
-
-- navigation
-- controls
+### General UX
 - loading states
-- errors
+- empty states
+- error handling
 - tooltips
-- cluster labels
-- search UI
-- topic UI
-- citation overlay
-- frontier radar
-- evidence explorer
-- PDF viewer
-- constraint interactions
+- consistent visual hierarchy
+- navigation
 - accessibility where practical
+- responsive behavior where relevant
+- canvas controls
+- PDF viewer integration
 
-Avoid unnecessary frontend rewrites.
+IMPORTANT:
+- Phase 8 should primarily improve and expose existing functionality.
+- It should NOT create a new research-analysis subsystem.
+- It should NOT require an LLM.
+- It should NOT add speculative research capabilities.
 
 ---
 
-# Phase 12 — Performance + Caching
+# Phase 9 — Performance + Reliability
+
+Keep this focused.
+
+Evaluate:
+- embedding caching
+- ingestion caching
+- unnecessary recomputation
+- search latency
+- clustering runtime
+- layout runtime
+- frontend rendering
+- incremental updates
 
 Profile before optimizing.
 
-Focus on:
+Do not introduce unnecessary infrastructure (no Redis, microservices, Kubernetes, queues, or distributed systems unless a measured problem genuinely requires them).
 
-- embedding caching
-- PDF caching
-- incremental recomputation
-- layout performance
-- frontend rendering
-- search latency
-- large-corpus behavior
-
-Do not replace O(n²) layout without evidence that it is a real bottleneck.
+If the system performs adequately, document the measurements and move on.
 
 ---
 
-# Phase 13 — Complete Evaluation
+# Phase 10 — Complete Evaluation
 
-Run real experiments.
+Focus on demonstrating that the system works rather than adding more features.
 
-Compare where meaningful:
+Evaluate where meaningful:
 
-- MPNet + HDBSCAN
-- MPNet + KMeans
-- MPNet + Agglomerative
+### Clustering
+- HDBSCAN
+- KMeans
+- Agglomerative clustering
 
-Measure:
-
-- silhouette
+Metrics:
+- Silhouette
 - Davies-Bouldin
 - Calinski-Harabasz
 - number of clusters
-- noise percentage
+- noise/outlier percentage
 - runtime
 
-Also evaluate, where ground truth or appropriate fixtures exist:
-
+### Constraints
+Evaluate:
 - constraint satisfaction
-- incremental stability
-- search behavior
-- citation extraction
-- frontier behavior
+- effect of constraints
+- clustering changes
+- stability
 
-Never fabricate values.
+### Incremental behavior
+Evaluate:
+- cluster identity preservation
+- spatial stability
+- document additions
+- layout displacement
+
+### Semantic search
+Evaluate search behavior using a manually constructed/reasonable evaluation set if possible.
+
+Do NOT fabricate ground truth.
+Do NOT fabricate metrics.
+Only report experiments that are actually performed.
 
 ---
 
-# Phase 14 — Documentation
+# Phase 11 — Documentation
 
 Update:
-
 - README
-- architecture
-- setup
+- architecture documentation
+- setup instructions
 - API documentation
 - methodology
 - evaluation
 - limitations
 - usage
-- screenshots/examples where useful
+- screenshots/examples where appropriate
 
-Documentation must describe actual implemented behavior.
+The documentation must describe what is actually implemented.
 
 ---
 
-# Phase 15 — Security + Robustness Audit
+# Phase 12 — Security + Robustness
+
+Keep this lightweight and practical.
 
 Test:
-
 - malformed PDFs
 - oversized uploads
 - invalid IDs
-- invalid requests
-- duplicate uploads
+- malformed API requests
+- duplicate files
 - empty documents
 - corrupted cache
 - unusual text
 - filesystem safety
 - API errors
-- frontend failures
+- frontend error states
 
-Fix meaningful vulnerabilities and robustness issues.
+Fix meaningful issues. Do not turn this into a separate security research project.
 
 ---
 
-# Phase 16 — Final Regression
+# Phase 13 — Final Regression
 
-Run end-to-end regression over:
+Perform final end-to-end validation:
 
 PDF upload
 → ingestion
 → chunking
 → embeddings
-→ constraints
-→ clustering
-→ topics
+→ constraint-aware clustering
+→ topic modeling
 → layout
-→ search
-→ cluster lifecycle
-→ citation overlay
-→ frontier analysis
-→ research evidence explorer
-→ frontend
+→ semantic search
+→ PDF navigation/highlighting
+→ cluster rename
+→ cluster merge
+→ cluster split
+→ frontend interactions
 
-Verify no major regressions.
+Verify that all core functionality works together.
+
+Do not add new features during this phase.
 
 Create final implementation report covering:
-
 - architecture
 - bugs fixed
 - features
@@ -457,3 +408,4 @@ Create final implementation report covering:
 - limitations
 - viva-relevant technical explanations
 - future work
+
