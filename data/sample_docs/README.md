@@ -16,7 +16,7 @@ To respect copyright and publisher distribution policies:
 
 ## 2. Complete 34-Paper Corpus Mapping
 
-To replicate the complete [Phase 10 Empirical Evaluation](../../EVALUATION_REPORT.md) and all quantitative benchmarks, download the missing papers from their respective open-access publisher repositories (e.g., arXiv, ACM Digital Library, IEEE Xplore, USENIX) and place them into `data/sample_docs/` using the exact filename mapping below:
+To replicate the complete [Empirical Evaluation](../../docs/EVALUATION.md) and all quantitative benchmarks, download the missing papers from their respective open-access publisher repositories (e.g., arXiv, ACM Digital Library, IEEE Xplore, USENIX) and place them into `data/sample_docs/` using the exact filename mapping below:
 
 | ID | Title | Authors / Source | Redistribution Status |
 |---|---|---|---|

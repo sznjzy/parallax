@@ -24,8 +24,8 @@ This document provides exact, end-to-end instructions for reproducing all system
 
 ### Step 1: Clone Repository
 ```bash
-git clone <repository-url>
-cd v1
+git clone https://github.com/sznjzy/parallax.git
+cd parallax
 ```
 
 ### Step 2: Backend Setup
@@ -74,7 +74,7 @@ npm run dev
 
 ## 4. Running Automated Regression Test Suites
 
-Parallax includes 67 unit and integration tests covering ingestion, clustering, constraints, spatial layout physics, topic modeling, semantic search, and API endpoints.
+Parallax includes **68 automated unit and integration tests** covering ingestion, clustering, constraints, spatial layout physics, topic modeling, semantic search, security hardening, and API endpoints.
 
 ```bash
 # From repository root with virtual environment activated:
@@ -83,9 +83,9 @@ python -u run_all_tests.py
 
 ### Expected Output:
 ```
-Ran 67 tests in ~90-115s
+Ran 68 tests in ~85-115s
 OK
-Total Tests Run: 67
+Total Tests Run: 68
 Failures: 0
 Errors: 0
 Skipped: 0
@@ -109,9 +109,20 @@ dist/assets/index-...js
 
 ---
 
-## 5. Running the Phase 10 Empirical Evaluation Suite
+## 5. Sample Research Corpus & Licensing Scope
 
-The quantitative evaluation suite benchmarks clustering quality, constraint satisfaction, incremental multi-stage stability, semantic search information retrieval, and scalability.
+The full evaluation corpus consists of **34 academic papers** (`paper1.pdf` through `paper34.pdf`) spanning Deep Learning, Distributed Systems, Computer Networking, Compiler Optimization, and Information Visualization, plus one intentional culinary outlier paper (`paper34.pdf`).
+
+To respect copyright and publisher distribution policies:
+- **Redistributable Papers (Tracked in Git):** 5 papers with explicit Creative Commons licenses are tracked directly in `data/sample_docs/` (`paper5.pdf`, `paper23.pdf`, `paper24.pdf`, `paper26.pdf`, `paper34.pdf`).
+- **Restricted Papers (Local Reproduction):** 29 papers with restrictive publisher licenses are omitted from Git tracking and ignored by `.gitignore`.
+- See [`data/sample_docs/README.md`](../data/sample_docs/README.md) for the complete 34-paper title/author/venue mapping and instructions to obtain missing papers from open-access publisher repositories.
+
+---
+
+## 6. Running the Empirical Evaluation Suite
+
+The quantitative evaluation suite benchmarks clustering quality (E1), constraint satisfaction (E2), incremental multi-stage stability (E3), semantic search information retrieval (E4), and scalability ($N=34$ to $500$).
 
 ```bash
 # From repository root with virtual environment activated:
@@ -120,18 +131,18 @@ python -u backend/evaluation/run_all_evaluations.py
 
 ### Generated Artifacts:
 Upon completion, the evaluation runner writes:
-1. `EVALUATION_REPORT.md` — Complete Markdown report with comparative tables.
+1. `docs/EVALUATION.md` (or `EVALUATION_REPORT.md`) — Complete Markdown report with comparative tables.
 2. `evaluation_results.json` — Machine-readable raw JSON data.
 
 ---
 
-## 6. Evaluation Subsystems & Methodological Design
+## 7. Evaluation Subsystems & Methodological Design
 
 ### E1 — Clustering Quality Benchmark
-- **Synthetic Benchmark:** Evaluates HDBSCAN, KMeans (Oracle-$k$), and Agglomerative Clustering (Oracle-$k$) across synthetic Gaussian clusters ($k \in [2, 8]$) with injected noise points. Measures Adjusted Rand Index ($ARI$), Normalized Mutual Information ($NMI$), Silhouette, Davies-Bouldin, and injected noise classification precision/recall.
+- **Synthetic Benchmark:** Evaluates HDBSCAN, KMeans (Oracle-$k$), and Agglomerative Clustering (Oracle-$k$) across synthetic Gaussian clusters ($k \in [2, 8]$) with injected noise points. Measures Adjusted Rand Index ($ARI$), Normalized Mutual Information ($NMI$), Silhouette, Davies-Bouldin, and noise classification.
 - **Real 34-Paper Corpus:** Runs on 768-D embeddings from `data/sample_docs/` extracted with `sentence-transformers/all-mpnet-base-v2`. Compares HDBSCAN autonomous discovery against KMeans ($k=2..8$) and Agglomerative Clustering ($k=2..8$).
 
-### E2 — Constraint Effectiveness (ADR-001)
+### E2 — Constraint Effectiveness
 Evaluates production `run_constraint_aware_clustering()` across 4 controlled conditions:
 - **Condition A:** Unconstrained baseline ($0$ constraints).
 - **Condition B:** Single document reassignment ($1$ constraint).
@@ -140,7 +151,7 @@ Evaluates production `run_constraint_aware_clustering()` across 4 controlled con
 - **Metrics:** Constraint Satisfaction Rate ($CSR$), unconstrained partition stability ($ARI$), centroid displacement ($\Delta c$), and silhouette impact ($\Delta SS$).
 
 ### E3 — Incremental Multi-Stage Stability
-Evaluates cluster UUID preservation (ADR-003) and spatial layout continuity (ADR-004) across sequential corpus expansions using exact documented subsets:
+Evaluates cluster UUID preservation and spatial layout continuity across sequential corpus expansions using exact documented subsets:
 - **Stage 0 ($N=20$):** `paper1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 15, 17, 18, 19, 20, 23, 24, 25, 29, 30`
 - **Stage 1 ($N=27$):** Stage 0 + `paper3, 12, 13, 14, 16, 31, 32`
 - **Stage 2 ($N=34$):** Stage 1 + `paper21, 22, 26, 27, 28, 33, 34`
@@ -155,7 +166,7 @@ Measures execution latencies across synthetic corpora of size $N \in [34, 50, 10
 
 ---
 
-## 7. Key Parameters & Configuration
+## 8. Key Parameters & Configuration
 
 | Module | Parameter | Value | Rationale |
 |---|---|---|---|
@@ -171,7 +182,7 @@ Measures execution latencies across synthetic corpora of size $N \in [34, 50, 10
 
 ---
 
-## 8. Empirical Observations & Known System Limitations
+## 9. Empirical Observations & Known System Limitations
 
 1. **Force-Directed Physics Scaling:** Physics simulation scales quadratically $O(N^2)$ with the number of canvas nodes. While execution is fast for small corpora ($123.6\text{ ms}$ at $N=34$, $904.3\text{ ms}$ at $N=100$), execution at $N=500$ takes $\approx 18.6\text{ seconds}$ per 80 iterations on CPU. For interactive UI rendering, corpus sizes between $N=20$ and $N=100$ provide the smoothest experience.
 2. **Density-Based Clustering on Small Datasets:** When corpus size is very small ($N < 6$) or documents are uniformly sparse, HDBSCAN may classify a majority of points as noise. Parallax incorporates an automatic fallback to KMeans in such degenerate regimes.
@@ -179,10 +190,9 @@ Measures execution latencies across synthetic corpora of size $N \in [34, 50, 10
 
 ---
 
-## 9. Security Boundaries & Deployment Assumptions
+## 10. Security Boundaries & Deployment Assumptions
 
 1. **Filesystem & Path Traversal Defenses:** All file retrieval, document deletion, and upload endpoints enforce strict path sanitization (`sanitize_filename()`). Slashes, backslashes, null bytes (`\x00`), and relative path components (`../`) are stripped or normalized to prevent directory escape outside `data/sample_docs/`.
 2. **File Ingestion Validation:** PDF uploads undergo strict multi-stage validation including filename extension checks, `%PDF-` magic byte signature verification, 50MB file size limits, and SHA-256 deduplication before ingestion or chunking.
 3. **Constraint Input Validation:** Constraint creation (`POST /api/constraints`) enforces non-empty, non-whitespace string identifiers for both document IDs and cluster IDs, returning controlled 400 Bad Request responses for malformed payloads.
-4. **Deployment Scope & CORS Policy:** Parallax is intended as a local/single-user research application. The FastAPI backend configures `allow_origins=["*"]` with `allow_credentials=False` as a local/development deployment assumption to support local Vite dev servers and disk-opened HTML canvases without external credential exposure. A production/public deployment would require a stricter origin policy, TLS termination, and additional security controls.
-
+4. **Deployment Scope & CORS Policy:** Parallax is intended as a local/single-user research application. The FastAPI backend configures `allow_origins=["*"]` with `allow_credentials=False` as a local/development deployment assumption to support local Vite dev servers and disk-opened HTML canvases without external credential exposure. A production/public deployment would require a stricter origin policy, TLS termination, and authentication.
