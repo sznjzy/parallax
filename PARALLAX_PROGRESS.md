@@ -4,11 +4,11 @@ This file records the actual implementation state of the Parallax repository.
 
 ## Current Phase
 
-Phase 11 — Documentation & Reproducibility
+Phase 13 — Final Regression
 
 ## Status
 
-IN PROGRESS
+READY TO START
 
 ## Completed Phases
 
@@ -24,10 +24,12 @@ IN PROGRESS
 - **Phase 8 — Frontend Redesign & Grounded Evidence Inspection**: Implemented a comprehensive 3-Zone UI architecture (Collapsible 56px→220px NavRail, Canvas Centerpiece with floating CommandBar and CanvasDock, Contextual Right Workspace Drawer with Search, Library, Clusters, Evaluation, and Document Inspector workspaces, and modal Settings). Refined Light/Dark theme text contrast, high-contrast canvas annotations, zero-reflow 60 FPS NavRail overlay, physics rerun integration with loading spinners, in-app deep-linking PDF viewer, and strict keyboard shortcut navigation without requiring generative LLMs (67/67 automated tests passing, production build verified).
 - **Phase 9 — Performance + Reliability**: Implemented React memoization across canvas components (`DocumentNode`, `ClusterRegion`), vectorized rendering transformations, and verified full interaction and physics stability (67/67 automated tests passing, clean production build).
 - **Phase 10 — Complete Evaluation**: Implemented end-to-end evaluation suite (`backend/evaluation/`) covering E1 Clustering Quality (HDBSCAN vs KMeans vs Agglomerative on synthetic and real 34-paper corpora), E2 Constraint Effectiveness (Conditions A–D with 100% satisfaction rate), E3 Incremental Stability (Stage 0 $\to$ 1 $\to$ 2 transitions), E4 Semantic Search (ground-truth evaluation across 5 queries, MRR = 1.0000), and controlled Scalability benchmarks ($N \le 500$). Generated comprehensive `EVALUATION_REPORT.md` and machine-readable `evaluation_results.json` (commit `d0ac658`).
+- **Phase 11 — Documentation & Reproducibility**: Rewrote comprehensive primary README with exact architecture pipeline, verified API references, setup instructions, honest empirical limitations, and academic terminology audit; updated PARALLAX_ARCHITECTURE.md through Phase 10; created dedicated docs/REPRODUCIBILITY.md guide; verified all 67/67 automated tests pass and clean frontend build with zero production code changes (commit `b430029`).
+- **Phase 12 — Security + Robustness**: Conducted security and robustness boundary audit across all API endpoints, request validation, filesystem operations, and state files. Hardened constraint input validation (rejecting empty/whitespace IDs with 400 Bad Request), sanitized filename handling and path traversal prevention (null byte stripping, path separator normalization, and centralized `sanitize_filename` usage in PDF streaming), verified deployment assumptions and CORS policy documentation, and added targeted regression tests (68/68 automated tests passing, clean frontend build with zero architectural changes).
 
 ## Current Phase Notes
 
-Phase 11 (Documentation & Reproducibility) is in progress. All project documentation (`README.md`, `PARALLAX_ARCHITECTURE.md`, `PARALLAX_DECISIONS.md`, `docs/REPRODUCIBILITY.md`) has been updated to reflect the verified Phase 10 implementation and empirical evaluation results with rigorous scientific language and zero ungrounded superlatives.
+Phase 12 is complete. Security and robustness hardening verified across all endpoints and filesystem boundaries with 68/68 automated tests passing. Phase 13 (Final Regression) is ready to start.
 
 ## Phase History
 
@@ -44,9 +46,9 @@ Phase 11 (Documentation & Reproducibility) is in progress. All project documenta
 | 8 | COMPLETE | 38a7736 | Complete Phase 8 frontend redesign: 3-Zone architecture, collapsible NavRail, CommandBar, InspectorDrawer workspaces, evidence inspection, and 60fps interaction polish |
 | 9 | COMPLETE | b40b071 | Performance & reliability optimizations: memoized node rendering, clean render cycles, verified physics |
 | 10 | COMPLETE | d0ac658 | Complete quantitative evaluation across E1, E2, E3, E4, and Scalability benchmarks |
-| 11 | IN PROGRESS | — | Documentation & Reproducibility |
-| 12 | NOT STARTED | — | Security + Robustness |
-| 13 | NOT STARTED | — | Final Regression |
+| 11 | COMPLETE | b430029 | Documentation & Reproducibility: comprehensive README, architecture update, docs/REPRODUCIBILITY.md, claims audit |
+| 12 | COMPLETE | 7e32cad | Security & Robustness: constraint input validation, path traversal defense, state isolation |
+| 13 | READY TO START | — | Final Regression |
 
 ## Open Issues
 

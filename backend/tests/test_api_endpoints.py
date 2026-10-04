@@ -83,6 +83,26 @@ class TestApiEndpoints(unittest.TestCase):
         r_after = self.client.get("/api/constraints")
         self.assertEqual(len(r_after.json()), 0)
 
+    def test_constraint_validation_and_malformed_input(self):
+        """POST /api/constraints rejects empty or whitespace-only inputs with 400 Bad Request."""
+        # 1. Empty strings
+        r1 = self.client.post("/api/constraints", json={"doc_id": "", "cluster_id": "c1"})
+        self.assertEqual(r1.status_code, 400)
+        self.assertIn("non-empty", r1.json()["detail"])
+
+        r2 = self.client.post("/api/constraints", json={"doc_id": "doc1", "cluster_id": ""})
+        self.assertEqual(r2.status_code, 400)
+        self.assertIn("non-empty", r2.json()["detail"])
+
+        # 2. Whitespace-only strings
+        r3 = self.client.post("/api/constraints", json={"doc_id": "   ", "cluster_id": "   "})
+        self.assertEqual(r3.status_code, 400)
+        self.assertIn("non-empty", r3.json()["detail"])
+
+        # 3. Missing fields (Pydantic validation 422)
+        r4 = self.client.post("/api/constraints", json={"doc_id": "doc1"})
+        self.assertEqual(r4.status_code, 422)
+
     def test_pdf_streaming_and_traversal_defense(self):
         """GET /api/documents/{filename}/pdf serves existing PDFs and rejects bad paths."""
         # Existing PDF
@@ -93,6 +113,10 @@ class TestApiEndpoints(unittest.TestCase):
         # Nonexistent PDF
         r_404 = self.client.get("/api/documents/nonexistent_paper_999.pdf/pdf")
         self.assertEqual(r_404.status_code, 404)
+
+        # Path traversal attempts
+        r_trav1 = self.client.get("/api/documents/..%2F..%2Fetc%2Fpasswd/pdf")
+        self.assertEqual(r_trav1.status_code, 404)
 
     def test_cluster_lifecycle_api_endpoints(self):
         """GET /api/clusters, PUT /topic, POST /merge, POST /split API endpoints."""
@@ -118,4 +142,5 @@ class TestApiEndpoints(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 

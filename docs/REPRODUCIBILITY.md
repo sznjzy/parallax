@@ -176,3 +176,13 @@ Measures execution latencies across synthetic corpora of size $N \in [34, 50, 10
 1. **Force-Directed Physics Scaling:** Physics simulation scales quadratically $O(N^2)$ with the number of canvas nodes. While execution is fast for small corpora ($123.6\text{ ms}$ at $N=34$, $904.3\text{ ms}$ at $N=100$), execution at $N=500$ takes $\approx 18.6\text{ seconds}$ per 80 iterations on CPU. For interactive UI rendering, corpus sizes between $N=20$ and $N=100$ provide the smoothest experience.
 2. **Density-Based Clustering on Small Datasets:** When corpus size is very small ($N < 6$) or documents are uniformly sparse, HDBSCAN may classify a majority of points as noise. Parallax incorporates an automatic fallback to KMeans in such degenerate regimes.
 3. **Information Retrieval Ground Truth:** The search evaluation ground truth reflects academic topic relevance defined on the evaluated 34-paper sample corpus; ranking performance on arbitrary external corpora depends on domain vocabulary and embedding model domain transfer.
+
+---
+
+## 9. Security Boundaries & Deployment Assumptions
+
+1. **Filesystem & Path Traversal Defenses:** All file retrieval, document deletion, and upload endpoints enforce strict path sanitization (`sanitize_filename()`). Slashes, backslashes, null bytes (`\x00`), and relative path components (`../`) are stripped or normalized to prevent directory escape outside `data/sample_docs/`.
+2. **File Ingestion Validation:** PDF uploads undergo strict multi-stage validation including filename extension checks, `%PDF-` magic byte signature verification, 50MB file size limits, and SHA-256 deduplication before ingestion or chunking.
+3. **Constraint Input Validation:** Constraint creation (`POST /api/constraints`) enforces non-empty, non-whitespace string identifiers for both document IDs and cluster IDs, returning controlled 400 Bad Request responses for malformed payloads.
+4. **Deployment Scope & CORS Policy:** Parallax is intended as a local/single-user research application. The FastAPI backend configures `allow_origins=["*"]` with `allow_credentials=False` as a local/development deployment assumption to support local Vite dev servers and disk-opened HTML canvases without external credential exposure. A production/public deployment would require a stricter origin policy, TLS termination, and additional security controls.
+
